@@ -3,7 +3,7 @@ class AppInfo {
   AppInfo._();
 
   static const String name = 'Helm';
-  static const String version = '1.0.0';
+  static const String version = '1.3.0';
   static const String author = 'Shakib';
   static const String tagline =
       'Take the helm of your Mac. A premium toolkit for a faster, cleaner machine — starting with storage.';

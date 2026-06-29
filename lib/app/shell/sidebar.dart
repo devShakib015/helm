@@ -16,13 +16,11 @@ import 'about_dialog.dart';
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key});
 
-  static const double width = 234;
-
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
     return Container(
-      width: width,
+      width: app.sidebarWidth,
       decoration: const BoxDecoration(
         color: AppColors.sidebarTint,
         border: Border(right: BorderSide(color: AppColors.stroke)),
@@ -32,26 +30,40 @@ class Sidebar extends StatelessWidget {
         children: [
           const SizedBox(height: 50), // clear the traffic lights
           const _Brand(),
-          const SizedBox(height: Insets.xl),
-          const _Label('TOOLS'),
+          const SizedBox(height: Insets.lg),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: Insets.md),
               children: [
-                for (final tool in kTools) ...[
-                  _ToolItem(
-                    meta: tool,
-                    active: app.current == tool.id,
-                    onTap: () => app.select(tool.id),
+                // Dashboard is pinned above the categories.
+                _ToolItem(
+                  meta: kPinnedTool,
+                  active: app.current == kPinnedTool.id,
+                  onTap: () => app.select(kPinnedTool.id),
+                ),
+                for (final cat in ToolCategory.values) ...[
+                  _CategoryHeader(
+                    category: cat,
+                    expanded: app.isExpanded(cat),
+                    onTap: () => app.toggleCategory(cat),
                   ),
-                  if (tool.id == ToolId.storage && app.current == ToolId.storage)
-                    ...StorageSection.values.map(
-                      (s) => _SectionItem(
-                        section: s,
-                        active: app.storageSection == s,
-                        onTap: () => app.selectStorageSection(s),
+                  if (app.isExpanded(cat))
+                    for (final tool in toolsInCategory(cat)) ...[
+                      _ToolItem(
+                        meta: tool,
+                        active: app.current == tool.id,
+                        onTap: () => app.select(tool.id),
                       ),
-                    ),
+                      if (tool.id == ToolId.storage &&
+                          app.current == ToolId.storage)
+                        ...StorageSection.values.map(
+                          (s) => _SectionItem(
+                            section: s,
+                            active: app.storageSection == s,
+                            onTap: () => app.selectStorageSection(s),
+                          ),
+                        ),
+                    ],
                 ],
               ],
             ),
@@ -59,6 +71,51 @@ class Sidebar extends StatelessWidget {
           const _Footer(),
         ],
       ),
+    );
+  }
+}
+
+/// A collapsible category label with a chevron that points down when open.
+class _CategoryHeader extends StatelessWidget {
+  const _CategoryHeader({
+    required this.category,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  final ToolCategory category;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Hoverable(
+      onTap: onTap,
+      builder: (context, hovered, _) {
+        final color =
+            hovered ? AppColors.textSecondary : AppColors.textTertiary;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+              Insets.sm, Insets.lg, Insets.xs, Insets.xs),
+          child: Row(
+            children: [
+              Icon(category.icon, size: 13, color: color),
+              const SizedBox(width: 7),
+              Text(
+                category.label.toUpperCase(),
+                style: AppType.micro.copyWith(color: color),
+              ),
+              const Spacer(),
+              AnimatedRotation(
+                turns: expanded ? 0 : -0.25,
+                duration: Motion.fast,
+                child: Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 16, color: color),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -99,19 +156,6 @@ class _Brand extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Label extends StatelessWidget {
-  const _Label(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.xl, 0, Insets.xl, Insets.sm),
-      child: Text(text, style: AppType.micro),
     );
   }
 }
@@ -261,6 +305,8 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final storage = context.watch<StorageController>();
+    final app = context.watch<AppController>();
+    final settingsActive = app.current == ToolId.settings;
     final granted = storage.fda == FdaStatus.granted;
     final v = storage.volume;
     return Container(
@@ -271,6 +317,36 @@ class _Footer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Hoverable(
+            onTap: () => context.read<AppController>().select(ToolId.settings),
+            builder: (context, hovered, _) => AnimatedContainer(
+              duration: Motion.fast,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.sm, vertical: Insets.sm),
+              decoration: BoxDecoration(
+                color: settingsActive
+                    ? AppColors.glassStrong
+                    : (hovered ? AppColors.glass : Colors.transparent),
+                borderRadius: BorderRadius.circular(Radii.md),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.settings_rounded,
+                      size: 17,
+                      color: settingsActive
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary),
+                  const SizedBox(width: Insets.md),
+                  Text('Settings',
+                      style: AppType.bodyStrong.copyWith(
+                          color: settingsActive
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: Insets.md),
           if (v.totalBytes > 0) ...[
             Text(
               '${formatBytes(v.freeBytes)} free of ${formatBytes(v.totalBytes)}',

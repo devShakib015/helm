@@ -23,18 +23,49 @@ extension StorageSectionX on StorageSection {
       };
 }
 
-/// Top-level navigation state: which tool is showing in the main pane, and —
+/// Top-level navigation state: which tool is showing in the main pane, which
+/// sidebar categories are expanded, the (drag-resizable) sidebar width, and —
 /// for Storage — which section.
 class AppController extends ChangeNotifier {
-  ToolId _current = ToolId.storage;
+  ToolId _current = ToolId.dashboard;
   ToolId get current => _current;
 
   StorageSection _storageSection = StorageSection.overview;
   StorageSection get storageSection => _storageSection;
 
+  // ---- Sidebar layout ----
+  static const double minSidebarWidth = 208;
+  static const double maxSidebarWidth = 380;
+  double _sidebarWidth = 248;
+  double get sidebarWidth => _sidebarWidth;
+
+  void setSidebarWidth(double width) {
+    final clamped = width.clamp(minSidebarWidth, maxSidebarWidth);
+    if (clamped == _sidebarWidth) return;
+    _sidebarWidth = clamped;
+    notifyListeners();
+  }
+
+  // ---- Category expand / collapse ----
+  // Start with Monitor open; the rest collapse so the rail stays tidy.
+  final Set<ToolCategory> _expanded = {ToolCategory.monitor};
+
+  bool isExpanded(ToolCategory c) => _expanded.contains(c);
+
+  void toggleCategory(ToolCategory c) {
+    if (!_expanded.remove(c)) _expanded.add(c);
+    notifyListeners();
+  }
+
   void select(ToolId id) {
     if (!toolMeta(id).available) return; // coming-soon tools are inert
-    if (_current == id) return;
+    // Make sure the chosen tool's category is open so it's visible in the rail.
+    final cat = toolMeta(id).category;
+    final expandedChanged = cat != null && _expanded.add(cat);
+    if (_current == id) {
+      if (expandedChanged) notifyListeners();
+      return;
+    }
     _current = id;
     notifyListeners();
   }
