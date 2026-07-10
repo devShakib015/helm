@@ -10,6 +10,7 @@ import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/ring_gauge.dart';
 import '../../network/widgets/sparkline.dart';
 import '../state/stats_controller.dart';
+import 'history_panel.dart';
 
 /// Live GPU utilization dashboard: a hero ring gauge with the current device
 /// activity percentage, a full-width sparkline of recent history, and a short
@@ -46,6 +47,12 @@ class GpuTool extends StatelessWidget {
               ),
               const SizedBox(height: Insets.xl),
               _GpuHeroPanel(gpu: gpu, history: c.gpuHistory, accent: accent),
+              const SizedBox(height: Insets.lg),
+              HistoryPanel(
+                title: 'History',
+                color: accent,
+                extract: (p) => p.gpu,
+              ),
               const SizedBox(height: Insets.lg),
               _GpuNote(accent: accent),
             ],

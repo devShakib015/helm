@@ -5,10 +5,13 @@ import 'package:provider/provider.dart';
 import 'app/alert_controller.dart';
 import 'app/app_controller.dart';
 import 'app/helm_app.dart';
+import 'app/housekeeping_controller.dart';
 import 'app/menu_bar_driver.dart';
 import 'app/settings_controller.dart';
+import 'app/tool_registry.dart';
 import 'core/services/native_system.dart';
 import 'tools/battery/state/battery_controller.dart';
+import 'tools/battery/state/bt_devices_controller.dart';
 import 'tools/clipboard/clipboard_controller.dart';
 import 'tools/colorpicker/color_picker_controller.dart';
 import 'tools/keepawake/keep_awake_controller.dart';
@@ -21,7 +24,9 @@ import 'tools/storage/state/cleaner_controller.dart';
 import 'tools/storage/state/duplicates_controller.dart';
 import 'tools/storage/state/large_files_controller.dart';
 import 'tools/storage/state/storage_controller.dart';
+import 'tools/system/state/processes_controller.dart';
 import 'tools/system/state/stats_controller.dart';
+import 'tools/system/state/stats_history.dart';
 import 'tools/uninstaller/state/uninstaller_controller.dart';
 
 Future<void> main() async {
@@ -37,11 +42,29 @@ Future<void> main() async {
   final keepAwake = KeepAwakeController();
   final colorPicker = ColorPickerController();
 
+  final app = AppController();
+
   // Native → Dart callbacks for the menu-bar quick actions.
   NativeSystem.registerHandlers();
   NativeSystem.onColorPicked = colorPicker.receivePick;
   NativeSystem.onMenuAction = (action) {
     if (action == 'toggleCaffeine') keepAwake.toggle();
+  };
+  NativeSystem.onClipCopy = (id, fromPopup) async {
+    await clipboard.copyById(id);
+    // A popup pick optionally pastes straight into the frontmost app.
+    if (fromPopup && settings.clipAutoPaste) {
+      await NativeSystem.simulatePaste();
+    }
+  };
+  // Notification clicks route to a specific tool (e.g. watchdog → Startup).
+  NativeSystem.onOpenTool = (name) {
+    for (final t in ToolId.values) {
+      if (t.name == name) {
+        app.select(t);
+        break;
+      }
+    }
   };
 
   // Registers listeners on stats + settings + clipboard + keepAwake (which keep
@@ -49,16 +72,23 @@ Future<void> main() async {
   MenuBarDriver(stats, settings, clipboard, keepAwake);
   // Watches stats against the user's thresholds and raises notifications.
   AlertController(stats, settings);
+  // Trash/Downloads size watchers + login-item watchdog.
+  HousekeepingController(settings);
+  // 24h telemetry ring buffer feeding the history charts.
+  final history = StatsHistory(stats);
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppController()),
+        ChangeNotifierProvider.value(value: app),
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: stats),
+        ChangeNotifierProvider.value(value: history),
         ChangeNotifierProvider.value(value: clipboard),
         ChangeNotifierProvider.value(value: keepAwake),
         ChangeNotifierProvider.value(value: colorPicker),
+        ChangeNotifierProvider(create: (_) => ProcessesController()),
+        ChangeNotifierProvider(create: (_) => BtDevicesController()),
         ChangeNotifierProvider(create: (_) => QuickActionsController()),
         ChangeNotifierProvider(create: (_) => StorageController()),
         ChangeNotifierProvider(

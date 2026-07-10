@@ -75,12 +75,39 @@ class CleanableGroup {
   int get selectedCount => items.where((i) => i.selected).length;
 
   bool get isEmpty => items.isEmpty;
+
+  /// True only when literally every item is ticked — partial selections show
+  /// as the checkbox's indeterminate state instead of a (dishonest) full tick.
   bool get allSelected => items.isNotEmpty && items.every((i) => i.selected);
+
   bool get noneSelected => items.every((i) => !i.selected);
 
+  /// The group-header checkbox. Checking a MIXED group only ticks its SAFE
+  /// items — caution items (release archives, simulators…) must be ticked
+  /// individually so nothing risky rides along with a broad sweep. A group
+  /// that is uniformly caution is different: ticking its header is already an
+  /// explicit single-risk decision, so it selects everything. Unchecking
+  /// always clears all.
   void selectAll(bool value) {
+    if (!value) {
+      for (final item in items) {
+        item.selected = false;
+      }
+      return;
+    }
+    final hasSafe = items.any((i) => i.risk == CleanupRisk.safe);
     for (final item in items) {
-      item.selected = value;
+      if (!hasSafe || item.risk == CleanupRisk.safe) item.selected = true;
+    }
+  }
+
+  /// The "Select Safe" sweep: STRICTLY risk == safe items, never the
+  /// uniform-caution fallback above — a broad "select everything safe" must
+  /// not tick archives/simulators just because their group has no safe
+  /// siblings on this machine.
+  void selectSafeOnly() {
+    for (final item in items) {
+      item.selected = item.risk == CleanupRisk.safe;
     }
   }
 }

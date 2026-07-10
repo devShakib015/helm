@@ -17,10 +17,15 @@ enum FdaStatus {
 }
 
 /// Detects and helps the user grant Full Disk Access. Done entirely in Dart by
-/// probing whether a TCC-protected path is actually *readable* (stat succeeds
+/// probing whether TCC-protected paths are actually *readable* (stat succeeds
 /// without FDA; opening/listing does not).
 class PermissionsService {
+  /// Tries EVERY probe path instead of judging from the first one: macOS gates
+  /// them all behind the same FDA switch, so access to any single one proves
+  /// the grant. Judging from one path alone caused false "denied" readings
+  /// when that particular probe was missing or failed for unrelated reasons.
   Future<FdaStatus> checkFullDiskAccess() async {
+    var sawBlocked = false;
     for (final p in MacPaths.fdaProbePaths) {
       final type = FileSystemEntity.typeSync(p, followLinks: false);
       if (type == FileSystemEntityType.notFound) continue;
@@ -31,14 +36,12 @@ class PermissionsService {
           final raf = File(p).openSync();
           raf.closeSync();
         }
-        return FdaStatus.granted;
-      } on FileSystemException {
-        return FdaStatus.denied;
+        return FdaStatus.granted; // any readable probe proves the grant
       } catch (_) {
-        return FdaStatus.denied;
+        sawBlocked = true; // exists but unreadable — keep trying the rest
       }
     }
-    return FdaStatus.unknown;
+    return sawBlocked ? FdaStatus.denied : FdaStatus.unknown;
   }
 
   /// Opens System Settings ▸ Privacy & Security ▸ Full Disk Access.

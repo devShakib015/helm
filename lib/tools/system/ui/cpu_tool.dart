@@ -11,6 +11,8 @@ import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/ring_gauge.dart';
 import '../../network/widgets/sparkline.dart';
 import '../state/stats_controller.dart';
+import 'history_panel.dart';
+import 'processes_panel.dart';
 
 /// Live processor monitor: a hero ring gauge of total CPU usage beside a usage
 /// sparkline, a per-logical-core breakdown, and a small stat row. Reads the
@@ -47,6 +49,14 @@ class CpuTool extends StatelessWidget {
                 cpu: stats.cpu,
                 history: c.cpuHistory,
                 accent: accent,
+              ),
+              const SizedBox(height: Insets.lg),
+              ProcessesPanel(accent: accent),
+              const SizedBox(height: Insets.lg),
+              HistoryPanel(
+                title: 'History',
+                color: accent,
+                extract: (p) => p.cpu,
               ),
               const SizedBox(height: Insets.lg),
               _CoresPanel(perCore: stats.cpuPerCore, accent: accent),

@@ -1,6 +1,8 @@
+import Carbon.HIToolbox
 import Cocoa
 import Darwin
 import FlutterMacOS
+import ImageIO
 import IOKit
 import IOKit.ps
 import ServiceManagement
@@ -113,6 +115,7 @@ final class HelmSystem: NSObject {
 
   private var statusItem: NSStatusItem?
   private var clipTexts: [String] = []
+  private var clipIds: [String] = []
   private var caffeineActive = false
   private var prevCPUTicks: [[UInt32]] = []
   private var prevNetIn: UInt64 = 0
@@ -140,12 +143,52 @@ final class HelmSystem: NSObject {
         pb.setString(s, forType: .string)
         result(true)
       } else { result(false) }
+    case "pbRead":
+      pbRead(result) // may answer asynchronously (image encode off-main)
+    case "pbWriteFiles":
+      if let paths = args?["paths"] as? [String], !paths.isEmpty {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        let urls = paths.map { NSURL(fileURLWithPath: $0) }
+        result(pb.writeObjects(urls))
+      } else { result(false) }
+    case "pbWriteImage":
+      if let path = args?["path"] as? String,
+         let data = FileManager.default.contents(atPath: path),
+         let img = NSImage(data: data) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        result(pb.writeObjects([img]))
+      } else { result(false) }
+    case "pbWriteImageData":
+      if let typed = args?["data"] as? FlutterStandardTypedData,
+         let img = NSImage(data: typed.data) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        result(pb.writeObjects([img]))
+      } else { result(false) }
     case "notify":
       HelmNotifier.shared.post(
         title: (args?["title"] as? String) ?? "Helm",
         body: (args?["body"] as? String) ?? "",
-        sound: (args?["sound"] as? Bool) ?? false)
+        sound: (args?["sound"] as? Bool) ?? false,
+        tool: args?["tool"] as? String)
       result(nil)
+    case "setClipHotkey":
+      if (args?["enabled"] as? Bool) ?? false,
+         let key = args?["keyCode"] as? Int,
+         let mods = args?["modifiers"] as? Int {
+        HelmHotKey.shared.onFire = { [weak self] in self?.showClipPopup() }
+        HelmHotKey.shared.register(keyCode: UInt32(key), modifiers: UInt32(mods))
+      } else {
+        HelmHotKey.shared.unregister()
+      }
+      result(nil)
+    case "simulatePaste":
+      simulatePaste()
+      result(nil)
+    case "axTrusted":
+      result(AXIsProcessTrusted())
     case "sampleColor":
       sampleColor { hex in result(hex) }
     case "menuBarUpdate":
@@ -166,6 +209,9 @@ final class HelmSystem: NSObject {
       result(nil)
     case "zoomWindow":
       MainFlutterWindow.shared?.zoom(nil)
+      result(nil)
+    case "relaunchApp":
+      relaunchApp()
       result(nil)
     default:
       result(FlutterMethodNotImplemented)
@@ -375,6 +421,158 @@ final class HelmSystem: NSObject {
     return 0
   }
 
+  // MARK: Pasteboard (multi-type)
+
+  /// Largest image the history will persist in full (larger ones keep only a
+  /// thumbnail and can't be copied back). Applied to the ENCODED PNG — what
+  /// is actually stored — never to raw TIFF pasteboard bytes.
+  private static let maxStoredImageBytes = 24 * 1024 * 1024
+  /// Refuse to even decode absurdly large pasteboard image payloads.
+  private static let maxDecodedSourceBytes = 256 * 1024 * 1024
+  /// Text is capped so a runaway copy (log dump, generated SQL…) can't bloat
+  /// the history file.
+  private static let maxTextChars = 1_000_000
+
+  /// Reads the pasteboard's richest representation, in priority order:
+  /// 1. **File URLs** (Finder copies) — stored as references ONLY. A 4 GB
+  ///    movie stays a path; its bytes are never read.
+  /// 2. **Image data** — bounded full PNG + a small thumbnail for the UI.
+  ///    Decode/encode runs OFF the main thread (it can take seconds for big
+  ///    pictures) and the result is delivered asynchronously.
+  /// 3. **Plain text** — length-capped.
+  private func pbRead(_ result: @escaping FlutterResult) {
+    let pb = NSPasteboard.general
+    var out: [String: Any] = ["change": pb.changeCount]
+
+    // 1. Files: references only, never contents.
+    if let urls = pb.readObjects(
+         forClasses: [NSURL.self],
+         options: [.urlReadingFileURLsOnly: true]) as? [URL],
+       !urls.isEmpty {
+      var total = 0
+      let fm = FileManager.default
+      for u in urls {
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: u.path, isDirectory: &isDir), !isDir.boolValue,
+           let attrs = try? fm.attributesOfItem(atPath: u.path),
+           let size = attrs[.size] as? Int {
+          total += size
+        }
+      }
+      out["kind"] = "file"
+      out["paths"] = urls.map { $0.path }
+      out["bytes"] = total
+      result(out)
+      return
+    }
+
+    // 2. Images. Snapshot the raw data + a text fallback on the main thread,
+    // then decode/encode on a background queue (pure CoreGraphics, so it's
+    // thread-safe) and answer async — a big screenshot must never beachball
+    // the app from the 800 ms poll.
+    let pngSource = pb.data(forType: .png)
+    let tiffSource = pngSource == nil ? pb.data(forType: .tiff) : nil
+    let textFallback = pb.string(forType: .string)
+    if let data = pngSource ?? tiffSource {
+      let isPng = pngSource != nil
+      DispatchQueue.global(qos: .userInitiated).async {
+        var o = out
+        let payload = HelmSystem.imagePayload(data: data, isPng: isPng)
+        if payload["kind"] as? String == "image" {
+          payload.forEach { o[$0] = $1 }
+        } else if let s = textFallback {
+          HelmSystem.textPayload(s).forEach { o[$0] = $1 }
+        } else {
+          o["kind"] = "none"
+        }
+        DispatchQueue.main.async { result(o) }
+      }
+      return
+    }
+
+    // 3. Text, capped.
+    if let s = pb.string(forType: .string) {
+      HelmSystem.textPayload(s).forEach { out[$0] = $1 }
+      result(out)
+      return
+    }
+
+    out["kind"] = "none"
+    result(out)
+  }
+
+  private static func textPayload(_ s: String) -> [String: Any] {
+    let truncated = s.count > maxTextChars
+    return [
+      "kind": "text",
+      "text": truncated ? String(s.prefix(maxTextChars)) : s,
+      "truncated": truncated,
+    ]
+  }
+
+  /// Builds the image fields: full PNG (only when the ENCODED size fits the
+  /// cap), a ≤512px thumbnail, true pixel dimensions, and the honest stored
+  /// size. Pure CoreGraphics — safe off the main thread.
+  private static func imagePayload(data: Data, isPng: Bool) -> [String: Any] {
+    var out: [String: Any] = [:]
+    guard data.count <= maxDecodedSourceBytes,
+          let cg = decodeImage(data) else {
+      out["kind"] = "none"
+      return out
+    }
+    out["kind"] = "image"
+    out["w"] = cg.width
+    out["h"] = cg.height
+    // A PNG source is kept byte-for-byte; TIFF (screenshots, Preview copies)
+    // is re-encoded first — the cap judges the PNG we'd store, NOT the
+    // inflated raw TIFF, so a 31 MB TIFF that's 4 MB as PNG still restores.
+    let fullPng: Data? = isPng ? data : encodePng(cg, maxDim: 0)
+    out["bytes"] = fullPng?.count ?? data.count
+    if let full = fullPng, full.count <= maxStoredImageBytes {
+      out["image"] = FlutterStandardTypedData(bytes: full)
+    }
+    if let thumb = encodePng(cg, maxDim: 512) {
+      out["thumb"] = FlutterStandardTypedData(bytes: thumb)
+    }
+    return out
+  }
+
+  private static func decodeImage(_ data: Data) -> CGImage? {
+    guard let src = CGImageSourceCreateWithData(data as CFData, nil) else {
+      return nil
+    }
+    return CGImageSourceCreateImageAtIndex(src, 0, nil)
+  }
+
+  /// PNG-encodes a CGImage, optionally downscaled so its longest side is
+  /// [maxDim] (0 = keep full size). CoreGraphics only — no AppKit drawing,
+  /// so it is safe on a background queue.
+  private static func encodePng(_ image: CGImage, maxDim: Int) -> Data? {
+    var img = image
+    if maxDim > 0, max(image.width, image.height) > maxDim {
+      let scale = CGFloat(maxDim) / CGFloat(max(image.width, image.height))
+      let w = max(1, Int(CGFloat(image.width) * scale))
+      let h = max(1, Int(CGFloat(image.height) * scale))
+      guard let ctx = CGContext(
+        data: nil, width: w, height: h,
+        bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+      else { return nil }
+      ctx.interpolationQuality = .high
+      ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+      guard let scaled = ctx.makeImage() else { return nil }
+      img = scaled
+    }
+    let out = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(
+      out as CFMutableData, "public.png" as CFString, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(dest, img, nil)
+    guard CGImageDestinationFinalize(dest) else { return nil }
+    return out as Data
+  }
+
   // MARK: Menu bar
 
   private func ensureStatusItem() {
@@ -394,7 +592,13 @@ final class HelmSystem: NSObject {
   }
 
   private func updateMenuBar(_ args: [String: Any]?) {
-    ensureStatusItem()
+    // Clip data is stored unconditionally — the hotkey popup reads it even
+    // when the menu bar is hidden. Only the status-item UI below is optional.
+    clipTexts = (args?["clips"] as? [String]) ?? []
+    clipIds = (args?["clipIds"] as? [String]) ?? []
+    caffeineActive = (args?["caffeine"] as? Bool) ?? false
+    // Visibility is controlled solely by setMenuBarVisible; don't resurrect
+    // a hidden status item here.
     guard let button = statusItem?.button else { return }
     let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
     let segs = (args?["segments"] as? [[String: Any]]) ?? []
@@ -412,8 +616,6 @@ final class HelmSystem: NSObject {
       attr.append(NSAttributedString(string: "Helm", attributes: [.font: font]))
     }
     button.attributedTitle = attr
-    clipTexts = (args?["clips"] as? [String]) ?? []
-    caffeineActive = (args?["caffeine"] as? Bool) ?? false
     rebuildMenu(details: (args?["details"] as? [String]) ?? [])
   }
 
@@ -431,11 +633,14 @@ final class HelmSystem: NSObject {
       let header = NSMenuItem(title: "Recent Clipboard", action: nil, keyEquivalent: "")
       header.isEnabled = false
       menu.addItem(header)
-      for (i, text) in clipTexts.enumerated() {
+      // The dropdown shows the first 8; the hotkey popup gets the full list.
+      for (i, text) in clipTexts.prefix(8).enumerated() {
         let item = NSMenuItem(
           title: clipPreview(text), action: #selector(clipClicked(_:)), keyEquivalent: "")
         item.target = self
-        item.tag = i
+        // Stable identity, not a positional index — the history can shift
+        // (new copies, deletes, re-sorts) between menu display and click.
+        if i < clipIds.count { item.representedObject = clipIds[i] }
         menu.addItem(item)
       }
       menu.addItem(.separator())
@@ -472,12 +677,71 @@ final class HelmSystem: NSObject {
     return oneLine.isEmpty ? "(empty)" : oneLine
   }
 
+  /// Menu-bar clipboard item clicked → let Dart do the copy-back. Dart owns
+  /// the full history (text, images, file references), so it restores the
+  /// right representation; a plain-text write here would mangle non-text clips.
+  /// Identified by the item's stable id so a shifting list can't mis-target.
   @objc private func clipClicked(_ sender: NSMenuItem) {
-    let i = sender.tag
-    guard i >= 0, i < clipTexts.count else { return }
-    let pb = NSPasteboard.general
-    pb.clearContents()
-    pb.setString(clipTexts[i], forType: .string)
+    guard let id = sender.representedObject as? String else { return }
+    channel?.invokeMethod("onClipCopy", arguments: ["id": id, "popup": false])
+  }
+
+  /// Global-hotkey quick-paste popup: shows the recent clips (labels + ids the
+  /// menu bar already streams) in a floating panel at the cursor.
+  private func showClipPopup() {
+    HelmClipPopup.shared.onPick = { [weak self] id in
+      self?.channel?.invokeMethod("onClipCopy", arguments: ["id": id, "popup": true])
+    }
+    HelmClipPopup.shared.toggle(labels: clipTexts.map(clipPreview), ids: clipIds)
+  }
+
+  /// Posts ⌘V to the frontmost app so a popup pick pastes in place. Requires
+  /// the Accessibility grant; without it the events would be dropped, so this
+  /// is a no-op when untrusted (the setting's UI explains the requirement).
+  private func simulatePaste() {
+    guard AXIsProcessTrusted() else { return }
+    // Virtual keycodes are POSITIONAL: on Dvorak-style layouts the QWERTY-V
+    // position types a different letter, so ⌘+9 would fire a different (maybe
+    // destructive) shortcut. Resolve the keycode that types "v" on the ACTIVE
+    // layout; fall back to the ANSI position.
+    let vKey = HelmSystem.keyCode(for: "v") ?? 9
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+      let src = CGEventSource(stateID: .combinedSessionState)
+      let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true)
+      down?.flags = .maskCommand
+      let up = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: false)
+      up?.flags = .maskCommand
+      down?.post(tap: .cghidEventTap)
+      up?.post(tap: .cghidEventTap)
+    }
+  }
+
+  /// The virtual keycode that produces [char] under the current keyboard
+  /// layout, or nil when it can't be resolved.
+  private static func keyCode(for char: Character) -> CGKeyCode? {
+    guard let sourceRef = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+          let layoutPtr = TISGetInputSourceProperty(sourceRef, kTISPropertyUnicodeKeyLayoutData)
+    else { return nil }
+    let data = Unmanaged<CFData>.fromOpaque(layoutPtr).takeUnretainedValue() as Data
+    return data.withUnsafeBytes { buf -> CGKeyCode? in
+      guard let layout = buf.bindMemory(to: UCKeyboardLayout.self).baseAddress
+      else { return nil }
+      var deadKeys: UInt32 = 0
+      var chars = [UniChar](repeating: 0, count: 4)
+      var length = 0
+      for code in 0..<128 {
+        let err = UCKeyTranslate(
+          layout, UInt16(code), UInt16(kUCKeyActionDisplay), 0,
+          UInt32(LMGetKbdType()), OptionBits(kUCKeyTranslateNoDeadKeysBit),
+          &deadKeys, chars.count, &length, &chars)
+        if err == noErr, length > 0,
+           let scalar = Unicode.Scalar(chars[0]),
+           Character(scalar) == char {
+          return CGKeyCode(code)
+        }
+      }
+      return nil
+    }
   }
 
   /// Menu-bar "Keep Awake" toggle — handled by the Dart CaffeineController so
@@ -527,6 +791,30 @@ final class HelmSystem: NSObject {
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     MainFlutterWindow.shared?.makeKeyAndOrderFront(nil)
+  }
+
+  /// A notification was clicked: reveal the window and tell Dart which tool
+  /// (if any) the notification wants shown.
+  func openFromNotification(tool: String?) {
+    showWindow()
+    if let tool = tool {
+      channel?.invokeMethod("onOpenTool", arguments: tool)
+    }
+  }
+
+  /// Spawns a new instance of Helm and terminates this one. Used after the
+  /// user grants Full Disk Access — macOS applies the grant at process launch.
+  /// Only terminates once the replacement actually launched; on failure the
+  /// current instance stays alive rather than stranding the user with nothing.
+  private func relaunchApp() {
+    let url = Bundle.main.bundleURL
+    let config = NSWorkspace.OpenConfiguration()
+    config.createsNewApplicationInstance = true
+    NSWorkspace.shared.openApplication(at: url, configuration: config) { app, _ in
+      DispatchQueue.main.async {
+        if app != nil { NSApp.terminate(nil) }
+      }
+    }
   }
 
   /// Starts the app quietly when launched at login: menu bar only — no window,
@@ -741,6 +1029,200 @@ final class HelmSMC {
   }
 }
 
+// MARK: - Global hotkey (Carbon — needs no special permissions)
+
+/// Registers a system-wide hotkey via Carbon's RegisterEventHotKey, which —
+/// unlike NSEvent global monitors — works without Accessibility or Input
+/// Monitoring grants.
+final class HelmHotKey {
+  static let shared = HelmHotKey()
+  var onFire: (() -> Void)?
+
+  private var hotKeyRef: EventHotKeyRef?
+  private var handlerRef: EventHandlerRef?
+
+  func register(keyCode: UInt32, modifiers: UInt32) {
+    unregister()
+    if handlerRef == nil {
+      var spec = EventTypeSpec(
+        eventClass: OSType(kEventClassKeyboard),
+        eventKind: UInt32(kEventHotKeyPressed))
+      InstallEventHandler(
+        GetApplicationEventTarget(),
+        { _, _, userData -> OSStatus in
+          guard let userData = userData else { return noErr }
+          Unmanaged<HelmHotKey>.fromOpaque(userData).takeUnretainedValue()
+            .onFire?()
+          return noErr
+        },
+        1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
+    }
+    let hkID = EventHotKeyID(signature: 0x48454C4D, id: 1) // 'HELM'
+    RegisterEventHotKey(
+      keyCode, modifiers, hkID, GetApplicationEventTarget(), 0, &hotKeyRef)
+  }
+
+  func unregister() {
+    if let ref = hotKeyRef {
+      UnregisterEventHotKey(ref)
+      hotKeyRef = nil
+    }
+  }
+}
+
+// MARK: - Quick-paste popup
+
+/// Borderless floating panel at the cursor listing recent clips.
+/// ↑/↓ moves the selection, ⏎ picks, esc closes, 1–9 quick-picks, and a click
+/// picks. Non-activating, so the frontmost app keeps focus and an auto-paste
+/// lands in the right place.
+final class HelmClipPopup: NSPanel, NSWindowDelegate {
+  static let shared = HelmClipPopup()
+
+  var onPick: ((String) -> Void)?
+
+  private var labels: [String] = []
+  private var ids: [String] = []
+  private var selectedIndex = 0
+  private var rowViews: [NSView] = []
+
+  private static let rowHeight: CGFloat = 30
+  private static let panelWidth: CGFloat = 380
+
+  private init() {
+    super.init(
+      contentRect: .zero,
+      styleMask: [.nonactivatingPanel, .borderless],
+      backing: .buffered, defer: true)
+    isFloatingPanel = true
+    level = .popUpMenu
+    collectionBehavior = [.canJoinAllSpaces, .transient]
+    isOpaque = false
+    backgroundColor = .clear
+    hidesOnDeactivate = false
+    delegate = self
+  }
+
+  override var canBecomeKey: Bool { true }
+
+  func toggle(labels: [String], ids: [String]) {
+    if isVisible {
+      hide()
+    } else {
+      present(labels: labels, ids: ids)
+    }
+  }
+
+  func hide() { orderOut(nil) }
+
+  func windowDidResignKey(_ notification: Notification) { hide() }
+
+  private func present(labels: [String], ids: [String]) {
+    guard !labels.isEmpty, labels.count == ids.count else { return }
+    self.labels = labels
+    self.ids = ids
+    selectedIndex = 0
+    buildContent()
+
+    // Position near the mouse, clamped inside the screen under it.
+    let mouse = NSEvent.mouseLocation
+    let size = frame.size
+    var origin = NSPoint(x: mouse.x - 10, y: mouse.y - size.height + 10)
+    let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+      ?? NSScreen.main
+    if let vis = screen?.visibleFrame {
+      origin.x = min(max(origin.x, vis.minX + 8), vis.maxX - size.width - 8)
+      origin.y = min(max(origin.y, vis.minY + 8), vis.maxY - size.height - 8)
+    }
+    setFrameOrigin(origin)
+    makeKeyAndOrderFront(nil)
+  }
+
+  private func buildContent() {
+    let height = CGFloat(labels.count) * HelmClipPopup.rowHeight + 16
+    let root = NSVisualEffectView(
+      frame: NSRect(x: 0, y: 0, width: HelmClipPopup.panelWidth, height: height))
+    root.material = .menu
+    root.state = .active
+    root.blendingMode = .behindWindow
+    root.wantsLayer = true
+    root.layer?.cornerRadius = 12
+    root.layer?.masksToBounds = true
+
+    rowViews = []
+    for (i, label) in labels.enumerated() {
+      let y = height - 8 - CGFloat(i + 1) * HelmClipPopup.rowHeight
+      let row = NSView(frame: NSRect(
+        x: 6, y: y, width: HelmClipPopup.panelWidth - 12,
+        height: HelmClipPopup.rowHeight))
+      row.wantsLayer = true
+      row.layer?.cornerRadius = 6
+      row.identifier = NSUserInterfaceItemIdentifier("\(i)")
+
+      if i < 9 {
+        let num = NSTextField(labelWithString: "\(i + 1)")
+        num.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        num.textColor = .tertiaryLabelColor
+        num.frame = NSRect(x: 9, y: 7, width: 16, height: 16)
+        row.addSubview(num)
+      }
+
+      let text = NSTextField(labelWithString: label)
+      text.font = NSFont.systemFont(ofSize: 12.5)
+      text.lineBreakMode = .byTruncatingTail
+      text.frame = NSRect(x: 30, y: 6, width: row.bounds.width - 40, height: 18)
+      row.addSubview(text)
+
+      row.addGestureRecognizer(
+        NSClickGestureRecognizer(target: self, action: #selector(rowClicked(_:))))
+      root.addSubview(row)
+      rowViews.append(row)
+    }
+    setContentSize(NSSize(width: HelmClipPopup.panelWidth, height: height))
+    contentView = root
+    highlight()
+  }
+
+  private func highlight() {
+    for (i, row) in rowViews.enumerated() {
+      row.layer?.backgroundColor = i == selectedIndex
+        ? NSColor.controlAccentColor.withAlphaComponent(0.28).cgColor
+        : NSColor.clear.cgColor
+    }
+  }
+
+  @objc private func rowClicked(_ g: NSClickGestureRecognizer) {
+    if let raw = g.view?.identifier?.rawValue, let i = Int(raw) { pick(i) }
+  }
+
+  private func pick(_ index: Int) {
+    guard index >= 0, index < ids.count else { return }
+    let id = ids[index]
+    hide()
+    onPick?(id)
+  }
+
+  override func keyDown(with event: NSEvent) {
+    switch Int(event.keyCode) {
+    case kVK_Escape:
+      hide()
+    case kVK_DownArrow:
+      selectedIndex = min(selectedIndex + 1, labels.count - 1)
+      highlight()
+    case kVK_UpArrow:
+      selectedIndex = max(selectedIndex - 1, 0)
+      highlight()
+    case kVK_Return, kVK_ANSI_KeypadEnter:
+      pick(selectedIndex)
+    default:
+      if let chars = event.charactersIgnoringModifiers,
+         let d = Int(chars), d >= 1, d <= min(9, labels.count) {
+        pick(d - 1)
+      }
+    }
+  }
+}
+
 // MARK: - Notifications
 
 /// Posts user notifications, preferring the modern UserNotifications framework
@@ -763,7 +1245,9 @@ final class HelmNotifier: NSObject, UNUserNotificationCenterDelegate {
     center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
   }
 
-  func post(title: String, body: String, sound: Bool = false) {
+  /// [tool]: when set, clicking the notification opens Helm on that tool
+  /// (e.g. the login-item watchdog routes to "startup").
+  func post(title: String, body: String, sound: Bool = false, tool: String? = nil) {
     // Always post through the modern center: the system enforces the user's
     // authorization choice (delivering once granted, dropping silently
     // otherwise) — no need to track the async grant state ourselves.
@@ -772,6 +1256,7 @@ final class HelmNotifier: NSObject, UNUserNotificationCenterDelegate {
       content.title = title
       content.body = body
       if sound { content.sound = .default }
+      if let tool = tool { content.userInfo = ["tool": tool] }
       center.add(UNNotificationRequest(
         identifier: UUID().uuidString, content: content, trigger: nil))
       return
@@ -795,5 +1280,16 @@ final class HelmNotifier: NSObject, UNUserNotificationCenterDelegate {
     } else {
       completionHandler([.alert, .sound])
     }
+  }
+
+  // Clicking a notification opens Helm, routed to the tool it names.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let info = response.notification.request.content.userInfo
+    HelmSystem.shared.openFromNotification(tool: info["tool"] as? String)
+    completionHandler()
   }
 }

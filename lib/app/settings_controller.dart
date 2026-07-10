@@ -5,6 +5,19 @@ import '../core/services/native_system.dart';
 import 'alert_metric.dart';
 import 'menu_metric.dart';
 
+/// Preset global hotkeys for the clipboard popup. Carbon key code for V is 9;
+/// modifier masks are Carbon's (cmd 256, shift 512, option 2048, control 4096).
+enum ClipHotkey {
+  cmdShiftV('⇧⌘V', 9, 256 | 512),
+  cmdOptionV('⌥⌘V', 9, 256 | 2048),
+  cmdCtrlV('⌃⌘V', 9, 256 | 4096);
+
+  const ClipHotkey(this.label, this.keyCode, this.modifiers);
+  final String label;
+  final int keyCode;
+  final int modifiers;
+}
+
 /// Persistent app settings (shared_preferences), plus the bridge to native for
 /// launch-at-login and menu-bar residency. The single source of truth the menu
 /// bar and clipboard read from.
@@ -27,6 +40,19 @@ class SettingsController extends ChangeNotifier {
   bool clipboardIgnoreConcealed = true;
   bool clipboardClearOnQuit = false;
   bool clipboardNotify = true;
+
+  // Clipboard quick-paste popup (global hotkey). Default is ⌃⌘V — unlike
+  // ⇧⌘V it doesn't shadow the system-wide "Paste and Match Style" shortcut.
+  bool clipPopupEnabled = true;
+  ClipHotkey clipPopupHotkey = ClipHotkey.cmdCtrlV;
+  bool clipAutoPaste = false; // simulate ⌘V after picking (needs Accessibility)
+
+  // Housekeeping watchers
+  bool hkTrashEnabled = false;
+  int hkTrashGB = 5;
+  bool hkDownloadsEnabled = false;
+  int hkDownloadsGB = 10;
+  bool watchLoginItems = true;
 
   // Alerts — one rule per metric, seeded from the metric defaults (all off).
   final Map<AlertMetric, AlertRule> _alertRules = {
@@ -59,6 +85,18 @@ class SettingsController extends ChangeNotifier {
     clipboardIgnoreConcealed = p.getBool('clipboardIgnoreConcealed') ?? true;
     clipboardClearOnQuit = p.getBool('clipboardClearOnQuit') ?? false;
     clipboardNotify = p.getBool('clipboardNotify') ?? true;
+    clipPopupEnabled = p.getBool('clipPopupEnabled') ?? true;
+    final hk = p.getString('clipPopupHotkey');
+    clipPopupHotkey = ClipHotkey.values.firstWhere(
+      (h) => h.name == hk,
+      orElse: () => ClipHotkey.cmdCtrlV,
+    );
+    clipAutoPaste = p.getBool('clipAutoPaste') ?? false;
+    hkTrashEnabled = p.getBool('hkTrashEnabled') ?? false;
+    hkTrashGB = p.getInt('hkTrashGB') ?? 5;
+    hkDownloadsEnabled = p.getBool('hkDownloadsEnabled') ?? false;
+    hkDownloadsGB = p.getInt('hkDownloadsGB') ?? 10;
+    watchLoginItems = p.getBool('watchLoginItems') ?? true;
     for (final m in AlertMetric.values) {
       final rule = _alertRules[m]!;
       rule.enabled = p.getBool('alert_${m.name}_on') ?? false;
@@ -140,6 +178,56 @@ class SettingsController extends ChangeNotifier {
   void setClipboardNotify(bool v) {
     clipboardNotify = v;
     _p?.setBool('clipboardNotify', v);
+    notifyListeners();
+  }
+
+  // ---- Quick-paste popup setters ----
+  void setClipPopupEnabled(bool v) {
+    clipPopupEnabled = v;
+    _p?.setBool('clipPopupEnabled', v);
+    notifyListeners();
+  }
+
+  void setClipPopupHotkey(ClipHotkey v) {
+    clipPopupHotkey = v;
+    _p?.setString('clipPopupHotkey', v.name);
+    notifyListeners();
+  }
+
+  void setClipAutoPaste(bool v) {
+    clipAutoPaste = v;
+    _p?.setBool('clipAutoPaste', v);
+    notifyListeners();
+  }
+
+  // ---- Housekeeping setters ----
+  void setHkTrashEnabled(bool v) {
+    hkTrashEnabled = v;
+    _p?.setBool('hkTrashEnabled', v);
+    notifyListeners();
+  }
+
+  void setHkTrashGB(int v) {
+    hkTrashGB = v.clamp(1, 100);
+    _p?.setInt('hkTrashGB', hkTrashGB);
+    notifyListeners();
+  }
+
+  void setHkDownloadsEnabled(bool v) {
+    hkDownloadsEnabled = v;
+    _p?.setBool('hkDownloadsEnabled', v);
+    notifyListeners();
+  }
+
+  void setHkDownloadsGB(int v) {
+    hkDownloadsGB = v.clamp(1, 100);
+    _p?.setInt('hkDownloadsGB', hkDownloadsGB);
+    notifyListeners();
+  }
+
+  void setWatchLoginItems(bool v) {
+    watchLoginItems = v;
+    _p?.setBool('watchLoginItems', v);
     notifyListeners();
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/services/native_system.dart';
+import '../../core/services/shell.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
@@ -129,6 +131,118 @@ class SettingsPage extends StatelessWidget {
                     trailing: _Toggle(
                       value: s.clipboardClearOnQuit,
                       onChanged: s.setClipboardClearOnQuit,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Insets.lg),
+
+              // ---- Quick paste popup ----
+              _SettingsSection(
+                title: 'Quick Paste',
+                children: [
+                  _SettingRow(
+                    title: 'Popup hotkey',
+                    description:
+                        'Press the hotkey anywhere to pick a recent clip at the cursor',
+                    trailing: _Toggle(
+                      value: s.clipPopupEnabled,
+                      onChanged: s.setClipPopupEnabled,
+                    ),
+                  ),
+                  _SettingRow(
+                    title: 'Hotkey',
+                    description: 'The global shortcut that opens the popup',
+                    trailing: _Segmented<ClipHotkey>(
+                      value: s.clipPopupHotkey,
+                      options: [
+                        for (final h in ClipHotkey.values)
+                          (value: h, label: h.label),
+                      ],
+                      onChanged: s.setClipPopupHotkey,
+                    ),
+                  ),
+                  _SettingRow(
+                    title: 'Paste automatically',
+                    description:
+                        'Press ⌘V for you after picking — needs the Accessibility permission',
+                    trailing: _Toggle(
+                      value: s.clipAutoPaste,
+                      onChanged: (v) async {
+                        s.setClipAutoPaste(v);
+                        if (v && !await NativeSystem.axTrusted()) {
+                          Shell.run('open', [
+                            'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+                          ]);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Insets.lg),
+
+              // ---- Housekeeping ----
+              _SettingsSection(
+                title: 'Housekeeping',
+                children: [
+                  _SettingRow(
+                    title: 'Trash size alert',
+                    description: s.hkTrashEnabled
+                        ? 'Notify when the Trash passes ${s.hkTrashGB} GB (checked every 15 min)'
+                        : 'Off',
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ThresholdStepper(
+                          value: s.hkTrashGB,
+                          unit: ' GB',
+                          color: const Color(0xFFF87171),
+                          enabled: s.hkTrashEnabled,
+                          onMinus: () => s.setHkTrashGB(s.hkTrashGB - 1),
+                          onPlus: () => s.setHkTrashGB(s.hkTrashGB + 1),
+                        ),
+                        const SizedBox(width: Insets.md),
+                        _Toggle(
+                          value: s.hkTrashEnabled,
+                          onChanged: s.setHkTrashEnabled,
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SettingRow(
+                    title: 'Downloads size alert',
+                    description: s.hkDownloadsEnabled
+                        ? 'Notify when Downloads passes ${s.hkDownloadsGB} GB'
+                        : 'Off',
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _ThresholdStepper(
+                          value: s.hkDownloadsGB,
+                          unit: ' GB',
+                          color: const Color(0xFF38BDF8),
+                          enabled: s.hkDownloadsEnabled,
+                          onMinus: () =>
+                              s.setHkDownloadsGB(s.hkDownloadsGB - 1),
+                          onPlus: () =>
+                              s.setHkDownloadsGB(s.hkDownloadsGB + 1),
+                        ),
+                        const SizedBox(width: Insets.md),
+                        _Toggle(
+                          value: s.hkDownloadsEnabled,
+                          onChanged: s.setHkDownloadsEnabled,
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SettingRow(
+                    title: 'Login-item watchdog',
+                    description:
+                        'Notify the moment any app installs a new login item or launch agent',
+                    trailing: _Toggle(
+                      value: s.watchLoginItems,
+                      onChanged: s.setWatchLoginItems,
                     ),
                   ),
                 ],

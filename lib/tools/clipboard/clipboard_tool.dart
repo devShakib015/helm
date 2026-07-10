@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -26,7 +28,16 @@ class ClipboardTool extends StatefulWidget {
 class _ClipboardToolState extends State<ClipboardTool> {
   static const Color _accent = Color(0xFF34D8C8);
 
-  final TextEditingController _search = TextEditingController();
+  late final TextEditingController _search;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seed from the controller so a query typed before navigating away isn't
+    // an invisible filter behind an empty-looking search box.
+    _search =
+        TextEditingController(text: context.read<ClipboardController>().query);
+  }
 
   @override
   void dispose() {
@@ -49,10 +60,21 @@ class _ClipboardToolState extends State<ClipboardTool> {
   }
 
   Future<void> _copy(ClipboardController c, ClipItem item) async {
-    await c.copy(item);
+    final status = await c.copy(item);
     if (!mounted) return;
+    final message = switch (status) {
+      CopyStatus.ok => 'Copied to clipboard',
+      CopyStatus.partial =>
+        'Some of those files no longer exist — copied the ones that remain',
+      CopyStatus.failed => switch (item.kind) {
+          ClipKind.image =>
+            'This image was too large to keep — only its preview is stored',
+          ClipKind.file => 'Those files no longer exist',
+          ClipKind.text => 'Couldn\'t copy to clipboard',
+        },
+    };
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Copied to clipboard')),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -159,16 +181,79 @@ class _ClipRow extends StatelessWidget {
   final VoidCallback onTogglePin;
   final VoidCallback onDelete;
 
-  /// Collapses runs of whitespace/newlines into single spaces so multi-line
-  /// snippets preview as a clean one-liner.
-  String get _preview =>
-      item.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  String get _caption {
+    final age =
+        formatAge(DateTime.fromMillisecondsSinceEpoch(item.createdMs));
+    switch (item.kind) {
+      case ClipKind.text:
+        final truncNote = item.truncated ? ' · trimmed' : '';
+        return '${formatCount(item.chars)} chars$truncNote · $age';
+      case ClipKind.image:
+        return 'PNG · ${formatBytes(item.sizeBytes)}'
+            '${item.imageRestorable ? '' : ' · preview only'} · $age';
+      case ClipKind.file:
+        final n = item.files.length;
+        final size =
+            item.sizeBytes > 0 ? ' · ${formatBytes(item.sizeBytes)}' : '';
+        return '$n ${n == 1 ? 'item' : 'items'}$size · $age';
+    }
+  }
+
+  /// Leading visual: a real thumbnail for images (from disk, or from memory in
+  /// clear-on-quit mode), a doc/folder glyph for file copies, the classic
+  /// paste icon for text.
+  Widget _leading() {
+    if (item.kind == ClipKind.image && item.thumbBytes != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        child: Image.memory(
+          item.thumbBytes!,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _iconBox(Icons.image_rounded),
+        ),
+      );
+    }
+    if (item.kind == ClipKind.image && item.thumbPath != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        child: Image.file(
+          File(item.thumbPath!),
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _iconBox(Icons.image_rounded),
+        ),
+      );
+    }
+    return _iconBox(switch (item.kind) {
+      ClipKind.image => Icons.image_rounded,
+      ClipKind.file =>
+        item.files.length == 1 ? Icons.description_rounded : Icons.folder_copy_rounded,
+      ClipKind.text => item.pinned
+          ? Icons.push_pin_rounded
+          : Icons.content_paste_rounded,
+    });
+  }
+
+  Widget _iconBox(IconData icon) => Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: (item.pinned ? accent : AppColors.textTertiary)
+              .withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(Radii.sm),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: item.pinned ? accent : AppColors.textSecondary,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
-    final caption =
-        '${item.chars} chars · ${formatAge(DateTime.fromMillisecondsSinceEpoch(item.createdMs))}';
-
     return Hoverable(
       onTap: onTap,
       builder: (context, hovered, _) => AnimatedContainer(
@@ -183,36 +268,21 @@ class _ClipRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: (item.pinned ? accent : AppColors.textTertiary)
-                    .withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(Radii.sm),
-              ),
-              child: Icon(
-                item.pinned
-                    ? Icons.push_pin_rounded
-                    : Icons.content_paste_rounded,
-                size: 16,
-                color: item.pinned ? accent : AppColors.textSecondary,
-              ),
-            ),
+            _leading(),
             const SizedBox(width: Insets.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _preview,
+                    item.preview,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.body,
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    caption,
+                    _caption,
                     style: AppType.caption
                         .copyWith(color: AppColors.textTertiary),
                   ),

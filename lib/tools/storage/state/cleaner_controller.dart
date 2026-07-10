@@ -78,7 +78,7 @@ class CleanerController extends ChangeNotifier {
 
   void selectAllSafe() {
     for (final g in groups) {
-      g.selectAll(g.risk == CleanupRisk.safe);
+      g.selectSafeOnly();
     }
     notifyListeners();
   }
@@ -94,8 +94,10 @@ class CleanerController extends ChangeNotifier {
   /// items are already discarded); everything else moves to the Trash so it's
   /// recoverable.
   Future<DeletionResult> cleanSelected() async {
-    final trashPaths = <String>[];
-    final permanentPaths = <String>[];
+    // Sets: the same path selected via two groups must only be removed once
+    // (a second attempt would report a spurious failure).
+    final trashPaths = <String>{};
+    final permanentPaths = <String>{};
     for (final g in groups) {
       for (final item in g.items) {
         if (!item.selected) continue;
@@ -107,8 +109,8 @@ class CleanerController extends ChangeNotifier {
       }
     }
 
-    final r1 = await _deleter.moveToTrash(trashPaths);
-    final r2 = await _deleter.deletePermanently(permanentPaths);
+    final r1 = await _deleter.moveToTrash(trashPaths.toList());
+    final r2 = await _deleter.deletePermanently(permanentPaths.toList());
     final removed = {...r1.removed, ...r2.removed};
 
     for (final g in groups) {

@@ -1,11 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../../core/models/snapshot_info.dart';
 import '../../../core/models/storage_category.dart';
 import '../../../core/models/volume_info.dart';
 import '../../../core/services/deletion_service.dart';
+import '../../../core/services/native_system.dart';
 import '../../../core/services/permissions_service.dart';
 import '../../../core/services/system_info_service.dart';
 import '../engine/category_scanner.dart';
@@ -16,7 +17,14 @@ import 'scan_state.dart';
 /// status, and the category breakdown scan. The single source of truth for
 /// "how full is the disk", which the other storage controllers refresh after
 /// they delete things.
-class StorageController extends ChangeNotifier {
+class StorageController extends ChangeNotifier with WidgetsBindingObserver {
+  StorageController() {
+    // Re-probe Full Disk Access whenever the app returns to the foreground —
+    // that's exactly when the user comes back from System Settings after
+    // flipping the toggle.
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   final SystemInfoService _sys = SystemInfoService();
   final PermissionsService _perm = PermissionsService();
   final DeletionService _deleter = DeletionService();
@@ -66,7 +74,12 @@ class StorageController extends ChangeNotifier {
 
   Future<void> recheckPermissions() async {
     fda = await _perm.checkFullDiskAccess();
-    notifyListeners();
+    _notify();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) recheckPermissions();
   }
 
   void dismissFdaBanner() {
@@ -75,6 +88,11 @@ class StorageController extends ChangeNotifier {
   }
 
   void openFdaSettings() => _perm.openFullDiskAccessSettings();
+
+  /// macOS applies a fresh Full Disk Access grant only to newly-launched
+  /// processes, so "I granted it but Helm still says limited" is fixed by a
+  /// relaunch. This spawns a new instance and quits this one.
+  void relaunchApp() => NativeSystem.relaunchApp();
 
   void markStale() {
     stale = true;
@@ -170,6 +188,7 @@ class StorageController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     _ticksSub?.cancel();
     _session?.cancel();
     super.dispose();

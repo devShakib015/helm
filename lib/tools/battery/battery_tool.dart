@@ -11,6 +11,7 @@ import '../../core/widgets/page_header.dart';
 import '../../core/widgets/ring_gauge.dart';
 import 'services/battery_service.dart';
 import 'state/battery_controller.dart';
+import 'ui/bt_devices_panel.dart';
 
 /// Read-only dashboard of battery health and power state: a big charge ring,
 /// a grid of health stat tiles, and a few macOS energy tips. Refresh is manual.
@@ -73,6 +74,7 @@ class BatteryTool extends StatelessWidget {
               const SizedBox(height: Insets.xl),
               _ChargePanel(info: info, accent: _accent),
               const SizedBox(height: Insets.lg),
+              const BtDevicesPanel(),
               _StatGrid(info: info, accent: _accent),
               const SizedBox(height: Insets.lg),
               const _EnergyTips(accent: _accent),

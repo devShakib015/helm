@@ -61,12 +61,14 @@ class _StorageToolState extends State<StorageTool> {
               icon: Icons.lock_outline_rounded,
               title: 'Grant Full Disk Access for complete results',
               message:
-                  'Helm can already scan most of your files. Full Disk Access lets it measure Mail, Messages, and other protected areas exactly.',
+                  'Turn Helm on in System Settings, then relaunch — macOS '
+                  'applies the permission when the app starts. Already granted '
+                  'but still seeing this? Relaunch Helm.',
               accent: AppColors.warning,
               primaryLabel: 'Open Settings',
               onPrimary: storage.openFdaSettings,
-              secondaryLabel: 'Recheck',
-              onSecondary: storage.recheckPermissions,
+              secondaryLabel: 'Relaunch Helm',
+              onSecondary: storage.relaunchApp,
               onDismiss: storage.dismissFdaBanner,
             ),
           ),

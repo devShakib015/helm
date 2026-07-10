@@ -28,27 +28,45 @@ class MenuBarDriver {
     NativeSystem.menuBarSetVisible(_settings.menuBarEnabled);
     NativeSystem.setResident(_settings.residentInMenuBar);
     _stats.setInterval(_settings.refreshSeconds);
+    // Global quick-paste hotkey follows the settings live.
+    final hk = _settings.clipPopupHotkey;
+    NativeSystem.setClipHotkey(
+      enabled: _settings.clipPopupEnabled && _settings.clipboardEnabled,
+      keyCode: hk.keyCode,
+      modifiers: hk.modifiers,
+    );
     _render();
   }
 
   void _render() {
-    if (!_settings.menuBarEnabled) return;
+    // NO early return on menuBarEnabled: this update also feeds the hotkey
+    // popup's clip list, which must stay live with the menu bar hidden.
+    // (Swift only touches the status item when one exists.)
     final s = _stats.stats;
     final segments = <Map<String, String>>[];
     for (final m in _settings.menuMetrics) {
       final seg = _segment(m, s);
       if (seg != null) segments.add(seg);
     }
-    final clips = _settings.clipboardEnabled
-        ? _clipboard.items.take(8).map((c) => c.text).toList()
-        : const <String>[];
+    // Labels + stable ids — clicking an entry calls back into
+    // ClipboardController BY ID, which restores the item's real
+    // representation (text, image or files) even if the list has shifted.
+    final menuClips =
+        _settings.clipboardEnabled ? _clipboard.menuItems : const <ClipItem>[];
     NativeSystem.menuBarUpdate(
       segments: segments,
       details: _details(s),
-      clips: clips,
+      clips: menuClips.map(_clipLabel).toList(),
+      clipIds: menuClips.map((c) => c.dedupeKey).toList(),
       caffeine: _keepAwake.active,
     );
   }
+
+  String _clipLabel(ClipItem c) => switch (c.kind) {
+        ClipKind.text => c.preview,
+        ClipKind.image => '🖼 ${c.preview}',
+        ClipKind.file => c.files.length == 1 ? '📄 ${c.preview}' : '📁 ${c.preview}',
+      };
 
   Map<String, String>? _segment(MenuMetric m, SystemStats s) {
     final info = metricInfo(m);

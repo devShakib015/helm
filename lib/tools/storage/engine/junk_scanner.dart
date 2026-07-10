@@ -43,7 +43,25 @@ void junkScanEntry(ScanBoot<void> boot) {
     return g;
   }
 
-  void addChildrenOf(CleanableGroup g, String dir, {String? detail}) {
+  // Paths owned by the dedicated Developer/Browser groups. The generic User
+  // Caches sweep must skip anything overlapping them (in either nesting
+  // direction) — double-listing means double-counted sizes and a guaranteed
+  // "failed to remove" on the second delete of every default clean.
+  final ownedElsewhere = <String>[
+    for (final d in MacPaths.developerCaches()) d.path,
+    for (final b in MacPaths.browserCaches()) b.path,
+  ];
+  bool ownedByDedicatedGroup(String path) {
+    for (final o in ownedElsewhere) {
+      if (path == o || o.startsWith('$path/') || path.startsWith('$o/')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void addChildrenOf(CleanableGroup g, String dir,
+      {String? detail, bool guardSensitive = false}) {
     if (FileSystemEntity.typeSync(dir, followLinks: false) ==
         FileSystemEntityType.notFound) {
       return;
@@ -51,6 +69,10 @@ void junkScanEntry(ScanBoot<void> boot) {
     for (final c in FsUtil.sizedChildren(dir, onProgress: onProg)) {
       if (c.bytes <= 0) continue;
       if (MacPaths.isProtected(c.path)) continue;
+      // Identity/account/session state never appears in the cleaner at all —
+      // deleting it silently logs the user out of Apple ID, Xcode, Mail, etc.
+      if (guardSensitive && MacPaths.isSensitiveName(c.name)) continue;
+      if (guardSensitive && ownedByDedicatedGroup(c.path)) continue;
       g.items.add(CleanableItem(
         path: c.path,
         name: c.name,
@@ -64,7 +86,7 @@ void junkScanEntry(ScanBoot<void> boot) {
   }
 
   void addMeasuredPath(CleanableGroup g, String path, String name,
-      {String? detail}) {
+      {String? detail, CleanupRisk? risk}) {
     if (FileSystemEntity.typeSync(path, followLinks: false) ==
         FileSystemEntityType.notFound) {
       return;
@@ -77,21 +99,25 @@ void junkScanEntry(ScanBoot<void> boot) {
       name: name,
       sizeBytes: m.bytes,
       detail: detail,
-      risk: g.risk,
+      risk: risk ?? g.risk,
     ));
     flush(force: true);
   }
 
   // 1. User caches ----------------------------------------------------------
+  // guardSensitive: account/identity/session caches are excluded entirely —
+  // clearing them signs the user out of Apple ID, iCloud, Xcode, Mail, etc.
   final userCache = group(CleanupKind.userCache, 'User Caches',
-      'App caches in your Library. Safe to clear — apps rebuild them.', CleanupRisk.safe);
-  addChildrenOf(userCache, MacPaths.userCaches);
+      'App caches in your Library. Safe to clear — apps rebuild them. '
+      'Login, account and session data is protected and never touched.',
+      CleanupRisk.safe);
+  addChildrenOf(userCache, MacPaths.userCaches, guardSensitive: true);
 
   // 2. System caches --------------------------------------------------------
   final sysCache = group(CleanupKind.systemCache, 'System Caches',
       'Shared caches in /Library. Usually safe; some need a restart to rebuild.',
       CleanupRisk.caution);
-  addChildrenOf(sysCache, MacPaths.systemCaches);
+  addChildrenOf(sysCache, MacPaths.systemCaches, guardSensitive: true);
 
   // 3. User logs ------------------------------------------------------------
   final userLogs = group(CleanupKind.userLogs, 'User Logs',
@@ -114,11 +140,23 @@ void junkScanEntry(ScanBoot<void> boot) {
   addChildrenOf(saved, MacPaths.savedAppState);
 
   // 7. Developer junk -------------------------------------------------------
+  // Truly-regenerable caches are safe. Things that hold WORK or configured
+  // state (release archives, simulator devices, pnpm's content store) are
+  // caution: listed, but never pre-selected.
   final dev = group(CleanupKind.developerJunk, 'Developer Junk',
-      'Xcode DerivedData, simulators, and package-manager caches. All regenerate.',
+      'Regenerable build caches are pre-selected. Archives and simulators hold '
+      'real data, so they need an explicit tick.',
       CleanupRisk.safe);
+  const devCaution = {
+    'Xcode Archives': 'Your app release builds — not regenerable',
+    'iOS Simulators': 'Removes simulator devices and everything in them',
+    'pnpm store': 'Breaks existing node_modules hard links',
+  };
   for (final d in MacPaths.developerCaches()) {
-    addMeasuredPath(dev, d.path, d.name);
+    final warning = devCaution[d.name];
+    addMeasuredPath(dev, d.path, d.name,
+        detail: warning,
+        risk: warning == null ? CleanupRisk.safe : CleanupRisk.caution);
   }
 
   // 8. Browser caches -------------------------------------------------------
@@ -198,16 +236,29 @@ Set<String> _installedBundleIds() {
     } catch (_) {
       continue;
     }
-    for (final e in entries) {
-      if (!e.path.endsWith('.app')) continue;
+    void addAppId(String appPath) {
       try {
         final res = Process.runSync(
           'defaults',
-          ['read', '${e.path}/Contents/Info', 'CFBundleIdentifier'],
+          ['read', '$appPath/Contents/Info', 'CFBundleIdentifier'],
         );
         final id = (res.stdout as String).trim();
         if (id.isNotEmpty) ids.add(id.toLowerCase());
       } catch (_) {}
+    }
+
+    for (final e in entries) {
+      if (e.path.endsWith('.app')) {
+        addAppId(e.path);
+      } else if (e is Directory) {
+        // Apps one level down too (e.g. /Applications/Setapp/Foo.app) —
+        // missing them makes Leftovers flag installed apps as orphans.
+        try {
+          for (final sub in e.listSync(followLinks: false)) {
+            if (sub.path.endsWith('.app')) addAppId(sub.path);
+          }
+        } catch (_) {}
+      }
     }
   }
   return ids;
@@ -244,6 +295,7 @@ void _collectLeftovers(
       final lower = name.toLowerCase();
       // Must look like a reverse-DNS bundle id (a.b.c) to qualify.
       if (lower.split('.').length < 3) continue;
+      if (MacPaths.isSensitiveName(name)) continue;
       if (installed.contains(lower)) continue;
       if (keepVendors.any((v) => lower.startsWith(v) || lower.contains(v))) {
         continue;

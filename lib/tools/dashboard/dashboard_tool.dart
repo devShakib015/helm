@@ -14,6 +14,7 @@ import '../../core/widgets/glass_panel.dart';
 import '../../core/widgets/hoverable.dart';
 import '../../core/widgets/page_header.dart';
 import '../../core/widgets/ring_gauge.dart';
+import '../battery/ui/bt_devices_panel.dart';
 import '../system/state/stats_controller.dart';
 
 /// The app's marquee first page: a clean device spec sheet. A gradient hero
@@ -73,6 +74,7 @@ class _DashboardToolState extends State<DashboardTool> {
               const SizedBox(height: Insets.lg),
               _LiveStatsRow(stats: stats),
               const SizedBox(height: Insets.lg),
+              const BtDevicesPanel(),
               _SpecSheet(device: device, stats: stats),
               const SizedBox(height: Insets.xl),
               const _AllToolsSection(),

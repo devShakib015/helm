@@ -101,14 +101,13 @@ class MacPaths {
       ];
 
   // ---- Browser caches -----------------------------------------------------
+  // ONLY true HTTP caches under ~/Library/Caches. Never anything inside a
+  // browser profile (Application Support) — Service Worker storage, Local
+  // Storage, IndexedDB and Cookies are site DATA: deleting them logs the user
+  // out of websites and web apps.
   static List<({String name, String path})> browserCaches() => [
         (name: 'Safari Caches', path: '$home/Library/Caches/com.apple.Safari'),
         (name: 'Google Chrome', path: '$home/Library/Caches/Google/Chrome'),
-        (
-          name: 'Chrome Service Worker',
-          path:
-              '$home/Library/Application Support/Google/Chrome/Default/Service Worker/CacheStorage'
-        ),
         (name: 'Brave', path: '$home/Library/Caches/BraveSoftware/Brave-Browser'),
         (name: 'Microsoft Edge', path: '$home/Library/Caches/Microsoft Edge'),
         (name: 'Arc', path: '$home/Library/Caches/company.thebrowser.Browser'),
@@ -124,9 +123,12 @@ class MacPaths {
   static String get tccProbe =>
       '$home/Library/Application Support/com.apple.TCC/TCC.db';
 
-  /// Secondary probes in case the primary is absent.
+  /// TCC-protected probes. Each is checked; access to ANY of them means FDA is
+  /// granted (macOS gates them all behind the same switch). The TCC directory
+  /// itself exists on every account, so the check never comes back "unknown".
   static List<String> get fdaProbePaths => [
         tccProbe,
+        '$home/Library/Application Support/com.apple.TCC',
         '$home/Library/Mail',
         '$home/Library/Safari',
         '$home/Library/Messages',
@@ -152,6 +154,67 @@ class MacPaths {
   static bool isProtected(String path) {
     for (final root in protectedRoots) {
       if (path == root || path.startsWith('$root/')) return true;
+    }
+    return false;
+  }
+
+  // ---- Sensitive data (never offered for cleanup) --------------------------
+
+  /// Cache/support folder name prefixes that hold identity, account, session
+  /// or licensing state. Deleting these logs the user out of Apple ID, iCloud,
+  /// the App Store, Xcode developer accounts, Wallet, Mail, Messages… so the
+  /// cleaner must never even LIST them, no matter how big they are.
+  static const List<String> _sensitivePrefixes = [
+    'com.apple.accounts', // Accounts daemon (Apple ID / internet accounts)
+    'com.apple.ak', // AuthKit — Apple ID auth tokens (com.apple.akd)
+    'com.apple.identityservices', // IDS (iMessage/FaceTime identity)
+    'com.apple.icloud', // iCloud helpers
+    'com.apple.bird', // iCloud Drive daemon
+    'com.apple.cloudd', // CloudKit daemon
+    'com.apple.cloudkit', // CloudKit caches
+    'com.apple.protectedcloudstorage',
+    'com.apple.appleaccount',
+    'com.apple.aps', // push-notification tokens (apsd)
+    'com.apple.commerce', // App Store purchase state
+    'com.apple.appstore', // App Store session
+    'com.apple.storeagent',
+    'com.apple.storekit', // StoreKit agents (storekitagent…)
+    'com.apple.itunesstored',
+    'com.apple.itunescloud', // iTunes/media cloud account daemons
+    'com.apple.ams', // Apple Media Services (amsaccountsd, amsengagementd…)
+    'com.apple.applemediaservices',
+    'com.apple.passd', // Wallet / Apple Pay
+    'com.apple.passkit',
+    'com.apple.security', // security daemons
+    'com.apple.keychain',
+    'com.apple.tcc', // privacy grants
+    'com.apple.dt.xcode', // Xcode — session/account/portal caches live here
+    'com.apple.mail', // Mail index/cache (forces re-download/re-index)
+    'com.apple.imfoundation', // Messages transfers
+    'com.apple.messages',
+    'com.apple.madrid', // iMessage
+    'com.apple.homekit',
+    'com.apple.sharedstreamsd', // shared photo streams
+    'com.apple.photolibraryd', // Photos library daemon
+  ];
+
+  /// Extra case-insensitive fragments that mark a folder as sensitive
+  /// regardless of vendor (third-party token/credential stores).
+  static const List<String> _sensitiveFragments = [
+    'keychain',
+    'credential',
+    'authtoken',
+  ];
+
+  /// True when a cleanup candidate's folder name looks like identity/account/
+  /// session state that must survive every cleanup.
+  static bool isSensitiveName(String folderName) {
+    final lower = folderName.toLowerCase();
+    for (final p in _sensitivePrefixes) {
+      if (lower == p || lower.startsWith(p)) return true;
+    }
+    for (final f in _sensitiveFragments) {
+      if (lower.contains(f)) return true;
     }
     return false;
   }

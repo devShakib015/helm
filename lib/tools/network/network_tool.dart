@@ -9,6 +9,7 @@ import '../../core/widgets/buttons.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/glass_panel.dart';
 import '../../core/widgets/page_header.dart';
+import '../system/ui/history_panel.dart';
 import 'services/network_service.dart';
 import 'state/network_controller.dart';
 import 'widgets/sparkline.dart';
@@ -92,6 +93,15 @@ class NetworkTool extends StatelessWidget {
                 const SizedBox(height: Insets.lg),
                 _WifiCard(wifi: c.wifi),
               ],
+
+              const SizedBox(height: Insets.lg),
+              HistoryPanel(
+                title: 'Download History',
+                color: _kAccent,
+                extract: (p) => p.netDown,
+                maxY: null,
+                formatValue: (v) => '${formatBytes(v.round())}/s',
+              ),
 
               const SizedBox(height: Insets.lg),
               _InterfaceRow(interfaces: c.interfaces),

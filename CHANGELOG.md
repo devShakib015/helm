@@ -2,6 +2,48 @@
 
 All notable changes to Helm are documented here.
 
+## [1.5.0] — 2026-07-10
+
+The clipboard goes instant, monitoring goes deep, and Helm starts watching your Mac for you.
+
+### Added
+
+- **Quick Paste popup** — press **⌃⌘V anywhere** (works system-wide, no permissions needed) and a floating panel appears at your cursor with your 15 most recent clips: ↑/↓ + ⏎ to pick, 1–9 for instant picks, click works too, esc closes. Picking restores the clip's original form (text, image, or file). Optional **auto-paste** presses ⌘V for you after picking (needs the Accessibility permission — Settings explains and opens the right pane; layout-aware, so it pastes correctly on Dvorak too). Hotkey presets: ⌃⌘V (default — ⇧⌘V is available but shadows macOS's "Paste and Match Style"), ⌥⌘V, ⇧⌘V. Works independently of the menu-bar toggle.
+- **Process manager** in the CPU tool — Activity-Monitor-style live list of the busiest processes with *current-interval* CPU % (not lifetime averages), memory, CPU/Memory sorting, and hover Quit / Force Kill.
+- **History charts** — Helm now keeps 24 hours of telemetry (sampled every 30 s, persisted across restarts). CPU, GPU, Memory, Sensors and Network pages gained a History card with 1h / 6h / 24h ranges, gridlines and peak annotation.
+- **Bluetooth batteries** — AirPods (left/right/case), Magic Keyboard/Mouse/Trackpad and other connected devices show their battery levels on the Dashboard and the Battery page.
+- **Housekeeping alerts** — optional watchers that notify when the **Trash** or **Downloads** folder crosses a size you set (checked every 15 min, at most one alert per day per folder). Clicking the notification opens the Storage tool.
+- **Login-item watchdog** — the moment any app installs a new login item or launch agent (user or system-wide), Helm notifies you; clicking the notification jumps straight to the Startup tool. On by default.
+- Notifications are now **clickable** — they deep-link to the relevant tool.
+
+## [1.4.0] — 2026-07-10
+
+Enterprise-grade clipboard, a cleaner that can never log you out, and reliable Full Disk Access.
+
+### Clipboard, rebuilt
+
+- **Images in history** — copied images now appear with real thumbnails, dimensions and size; click to put the image back on the clipboard (pastes anywhere). Full image kept up to 24 MB (bigger ones keep a preview only); PNGs stored beside the history and pruned with it.
+- **File copies stay references** — copying files in Finder (even a 4 GB movie) stores just the path, never the bytes. Click to restore a real file reference you can paste in Finder. Missing files are detected and reported instead of silently failing.
+- **Text is capped** at 1 M characters so runaway copies can't bloat the history.
+- **Menu bar** shows kind-aware entries (🖼 Image 512×512 · 57 KB, 📄 report.pdf) and clicking restores the item's original form — not a text mangling of it. Menu clicks are matched by a stable id, so a list that shifts while the menu is open can never copy the wrong item.
+- Copy-back no longer re-ingests itself as a "new" copy; duplicates are folded by content hash.
+- **"Clear on quit" is now truly private** — in that mode images are kept in memory only and never written to disk; leftover image files from earlier sessions are swept at launch.
+- Image decoding/encoding runs off the main thread (a huge screenshot can't freeze the app), and the size cap judges the stored PNG — not the inflated raw TIFF — so big Preview/screenshot copies restore fine.
+- Partially-missing file clips say so ("copied the ones that remain") instead of pretending everything was restored.
+
+### Cleaner safety (important)
+
+- **Login, account and session data is now untouchable.** A protect-list keeps Apple ID/iCloud (accountsd, AuthKit, CloudKit…), App Store, Wallet, Mail, Messages, Xcode account/session caches, and anything keychain/credential-like out of every scan — they're never even listed.
+- **Xcode Archives** (your release builds) and **iOS Simulators** (devices + their data) are no longer "safe junk": they're listed with warnings and must be ticked individually.
+- **Browser cleanup touches only true HTTP caches** — Service-Worker/site storage (which holds web-app logins) removed from the list.
+- Bulk selection ("Select Safe", group checkboxes) can only ever tick safe items in mixed groups; caution items always need an explicit individual tick.
+
+### Full Disk Access, fixed
+
+- The probe now tries every protected location (any readable one proves the grant) instead of judging from the first — no more false "limited access" readings.
+- Helm re-checks automatically when you return from System Settings.
+- New **Relaunch Helm** button on the banner — macOS applies a fresh grant only at app launch, which is why "I granted it but it still says limited" used to happen.
+
 ## [1.3.0] — 2026-06-29
 
 Organization and window polish.

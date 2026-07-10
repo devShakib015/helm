@@ -11,6 +11,7 @@ import '../../../core/widgets/glass_panel.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/ring_gauge.dart';
 import '../state/stats_controller.dart';
+import 'history_panel.dart';
 
 /// Live thermal dashboard: temperatures and fan speed read from the SMC. Apple
 /// Silicon currently exposes these only through low-level SMC access that Helm
@@ -57,8 +58,17 @@ class SensorsTool extends StatelessWidget {
                         'update.',
                   ),
                 )
-              else
+              else ...[
                 _SensorGrid(stats: stats, accent: _accent),
+                const SizedBox(height: Insets.lg),
+                HistoryPanel(
+                  title: 'CPU Temp History',
+                  color: _accent,
+                  extract: (p) => p.tempCpu,
+                  maxY: null,
+                  formatValue: (v) => '${v.round()}°C',
+                ),
+              ],
             ],
           ),
         ),

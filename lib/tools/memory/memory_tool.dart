@@ -12,6 +12,7 @@ import '../../core/widgets/glass_panel.dart';
 import '../../core/widgets/hoverable.dart';
 import '../../core/widgets/page_header.dart';
 import '../../core/widgets/ring_gauge.dart';
+import '../system/ui/history_panel.dart';
 import 'services/memory_service.dart';
 import 'state/memory_controller.dart';
 
@@ -125,6 +126,12 @@ class _MemoryToolState extends State<MemoryTool> {
               ),
               const SizedBox(height: Insets.xl),
               _PressurePanel(snapshot: snap, color: ringColor),
+              const SizedBox(height: Insets.lg),
+              HistoryPanel(
+                title: 'History',
+                color: ringColor,
+                extract: (p) => p.ram,
+              ),
               const SizedBox(height: Insets.lg),
               _Breakdown(snapshot: snap),
               const SizedBox(height: Insets.lg),
