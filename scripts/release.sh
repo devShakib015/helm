@@ -32,7 +32,10 @@ VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: *//' | cut -d'+' -f1)
 BUILD_APP="build/macos/Build/Products/Release/${APP_NAME}.app"
 DIST="dist"
 STAGE="${DIST}/stage"
-DMG="${DIST}/${APP_NAME}-${VERSION}.dmg"
+# Deliberately UNversioned: GitHub's permanent download URL is
+# .../releases/latest/download/<asset-name>, so the name must stay constant
+# across releases. The version lives in the volume title and the app itself.
+DMG="${DIST}/${APP_NAME}.dmg"
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -114,7 +117,7 @@ cp -R "$BUILD_APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"   # drag-to-install target
 
 hdiutil create \
-  -volname "$APP_NAME" \
+  -volname "$APP_NAME $VERSION" \
   -srcfolder "$STAGE" \
   -ov -format UDZO \
   -quiet \

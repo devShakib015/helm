@@ -8,7 +8,7 @@ A premium, native macOS management toolkit — starting with a complete **Storag
 
 Free • Open Source (MIT) • Built with Flutter
 
-### [⬇️ Download for macOS](https://github.com/devShakib015/helm/releases/latest)
+### [⬇️ Download for macOS](https://github.com/devShakib015/helm/releases/latest/download/Helm.dmg)
 
 macOS 12 Monterey or later · Apple Silicon & Intel · ~20 MB
 
@@ -24,7 +24,7 @@ It's a **multi-tool platform**: fifteen tools sharing one window, one menu-bar i
 
 ## 📦 Install
 
-1. **[Download the latest DMG](https://github.com/devShakib015/helm/releases/latest)**
+1. **[Download the latest DMG](https://github.com/devShakib015/helm/releases/latest/download/Helm.dmg)**
 2. Open it and drag **Helm** into your **Applications** folder
 3. **First launch:** macOS will say *“Helm can’t be opened because Apple cannot check it for malicious software.”* Click **Done**, then:
    > **System Settings ▸ Privacy & Security ▸** scroll down **▸ Open Anyway**
