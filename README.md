@@ -8,15 +8,53 @@ A premium, native macOS management toolkit — starting with a complete **Storag
 
 Free • Open Source (MIT) • Built with Flutter
 
+### [⬇️ Download for macOS](https://github.com/devShakib015/helm/releases/latest)
+
+macOS 10.15 or later · Apple Silicon & Intel · ~20 MB
+
 </div>
 
 ---
 
 ## What is Helm?
 
-**Helm** is a beautiful, fast, all-in-one utility for macOS. It puts you in control of your Mac — analyzing what's using your disk, finding the junk worth clearing, and reclaiming space safely.
+**Helm** is a beautiful, fast, all-in-one utility for macOS. One app that replaces a folder full of them — system monitoring, disk cleaning, clipboard history, and a dozen everyday tools, all in the same premium shell.
 
-It's a **multi-tool platform**: seven tools — Storage, Memory, Uninstaller, Startup, Privacy, Battery and Network — each slotting into the same premium shell, with more to come.
+It's a **multi-tool platform**: fifteen tools sharing one window, one menu-bar item, and one design language.
+
+## 📦 Install
+
+1. **[Download the latest DMG](https://github.com/devShakib015/helm/releases/latest)**
+2. Open it and drag **Helm** into your **Applications** folder
+3. **First launch:** macOS will say *“Helm can’t be opened because Apple cannot check it for malicious software.”* Click **Done**, then:
+   > **System Settings ▸ Privacy & Security ▸** scroll down **▸ Open Anyway**
+
+   You only do this once. *(On older macOS you can also right-click the app ▸ **Open**.)*
+4. Grant **Full Disk Access** when Helm asks, so the Storage tool can measure everything
+
+<details>
+<summary><b>Why does macOS warn about Helm?</b></summary>
+
+<br>
+
+Because Helm isn't *notarized* — Apple only notarizes apps from developers paying **$99/year** for the Apple Developer Program. Helm is free, so it isn't in that program.
+
+The warning means **“Apple hasn't personally checked this app,”** not that anything is wrong with it. Your protection here is better than a signature: **the entire source code is in this repository.** Read it, audit it, and build it yourself if you'd rather:
+
+```bash
+git clone https://github.com/devShakib015/helm.git && cd helm
+flutter build macos --release
+```
+
+Prefer the terminal? This removes the download quarantine flag directly:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Helm.app
+```
+
+</details>
+
+> Helm is free and open source. No account, no telemetry, no network calls — nothing ever leaves your Mac.
 
 > **Safe by design.** Helm never deletes destructively. Everything it removes goes to the **Trash**, so you can always get it back. The only exception is emptying the Trash itself — which you explicitly confirm.
 
@@ -73,28 +111,39 @@ Requires Flutter (stable) and Xcode.
 flutter pub get
 flutter run -d macos          # debug
 flutter build macos --release # release .app
+./scripts/release.sh          # signed + notarized DMG in dist/
 ```
 
-For distribution, Helm is intended to ship as a **notarized DMG** (not the Mac App Store) so it can request Full Disk Access. The app is **not sandboxed**; enable the Hardened Runtime in Xcode and notarize before sharing.
+Helm ships as a **notarized DMG** (not the Mac App Store) so it can request Full Disk Access — the app is deliberately **not sandboxed**. `scripts/release.sh` handles the whole pipeline: build → sign with the Hardened Runtime → notarize → staple → package. It adapts to the credentials available, so it still produces a local DMG without a Developer ID certificate.
 
 - **Bundle ID:** `com.devshakib.helm`
 - **Minimum macOS:** 10.15+
 
 ## 🧰 The toolkit
 
-Helm ships with **seven** tools, each in the same premium shell:
+**Fifteen tools**, grouped in one sidebar — plus a live **menu-bar item** with configurable metrics, and a **Dashboard** that shows your whole machine at a glance.
 
+**Monitor**
+- 🧠 **Memory** — live RAM breakdown, pressure gauge, top processes, free inactive memory
+- ⚡ **CPU** — per-core usage and an Activity-Monitor-style process list with quit / force-kill
+- 🎮 **GPU** — live graphics utilization
+- 🌡️ **Sensors** — real CPU/GPU temperatures read straight from the SMC
+- 🔋 **Battery** — health, cycles, power source, plus **Bluetooth device batteries** (AirPods, Magic Keyboard/Mouse)
+- 📡 **Network** — live throughput, interfaces, Wi-Fi and active connections
+
+**Manage**
 - 📊 **Storage** — analyze & reclaim disk space (categories, treemap, junk, large files, duplicates)
-- 🧠 **Memory** — live RAM breakdown, top processes, quit apps, free inactive memory
-- 🗑️ **Uninstaller** — remove an app *and* every leftover (caches, support, containers…) it leaves behind
+- 🗑️ **Uninstaller** — remove an app *and* every leftover it leaves behind
 - 🚀 **Startup** — manage login items and Launch Agents that run at boot
 - 🛡️ **Privacy** — clear browsing/shell/recent-item traces and flush the DNS cache
-- 🔋 **Battery** — health, cycle count, condition and power insights
-- 📡 **Network** — live up/down throughput, interfaces, Wi-Fi and active connections
 
-### Future ideas
+**Utilities**
+- 📋 **Clipboard** — full history for text, **images** and **file copies**, with a global **⌃⌘V quick-paste popup** at your cursor
+- 🎨 **Color Picker** — sample any pixel on screen; copies as HEX/RGB/HSL/SwiftUI/Flutter
+- ☕ **Keep Awake** — stop your Mac sleeping, indefinitely or on a timer
+- ⚡ **Quick Actions** — hidden files, Dark Mode, Dock autohide, restart Finder/Dock, sleep display
 
-- Login/keychain hygiene, duplicate-photo detection, scheduled auto-clean, menu-bar quick stats.
+Every monitor page keeps **24 hours of history** as a chart, and you can set **custom alerts** per metric ("tell me when RAM goes over 90%"), plus housekeeping watchers and a **login-item watchdog** that warns the moment an app installs itself at startup.
 
 ## 🔐 Privacy
 

@@ -9,5 +9,10 @@
 	<false/>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
+	<!-- Required under the Hardened Runtime so the Startup tool can read login
+	     items and Quick Actions can drive Finder / System Events via osascript.
+	     Without it those features fail silently in a notarized build. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>
