@@ -10,7 +10,7 @@ Free • Open Source (MIT) • Built with Flutter
 
 ### [⬇️ Download for macOS](https://github.com/devShakib015/helm/releases/latest)
 
-macOS 10.15 or later · Apple Silicon & Intel · ~20 MB
+macOS 12 Monterey or later · Apple Silicon & Intel · ~20 MB
 
 </div>
 
@@ -117,7 +117,7 @@ flutter build macos --release # release .app
 Helm ships as a **notarized DMG** (not the Mac App Store) so it can request Full Disk Access — the app is deliberately **not sandboxed**. `scripts/release.sh` handles the whole pipeline: build → sign with the Hardened Runtime → notarize → staple → package. It adapts to the credentials available, so it still produces a local DMG without a Developer ID certificate.
 
 - **Bundle ID:** `com.devshakib.helm`
-- **Minimum macOS:** 10.15+
+- **Minimum macOS:** 12.0 (Monterey)+
 
 ## 🧰 The toolkit
 
