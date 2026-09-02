@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "Helm — a macOS toolkit of fifteen native tools"
+abstract: >-
+  A free, open-source macOS toolkit: fifteen native tools in one window, including a storage cleaner with a treemap explorer, a duplicate finder, system monitors with 24-hour history and a clipboard manager.
+type: software
+authors:
+  - given-names: "K M Shahriar"
+    family-names: "Hossain"
+    orcid: "https://orcid.org/0009-0004-5489-9717"
+repository-code: "https://github.com/devShakib015/helm"
+url: "https://devshakib.jumyn.com/apps"
+license: MIT
+keywords:
+  - "clipboard-manager"
+  - "dart"
+  - "developer-tools"
+  - "disk-cleaner"
+  - "duplicate-finder"
+  - "flutter"
+  - "macos"
+  - "macos-app"
+  - "menu-bar"
+  - "open-source"
+  - "storage"
+  - "system-monitor"
