@@ -22,6 +22,56 @@ macOS 12 Monterey or later · Apple Silicon & Intel · ~20 MB
 
 It's a **multi-tool platform**: fifteen tools sharing one window, one menu-bar item, and one design language.
 
+## 📸 A look inside
+
+<div align="center">
+  <img src="docs/screenshots/dashboard.jpg" width="820"
+       alt="Helm's Dashboard: a MacBook Pro Apple M3 running macOS Tahoe, with live CPU, GPU, RAM and SSD ring gauges and a hardware detail table.">
+  <br>
+  <em><b>Dashboard</b> — the whole machine at a glance</em>
+</div>
+
+<br>
+
+<table>
+<tr>
+<td width="50%">
+  <img src="docs/screenshots/storage.jpg"
+       alt="Storage tool showing 209 GB available on a 494 GB drive, with used, purgeable and free segments and a disk breakdown donut.">
+  <br><em><b>Storage</b> — capacity including <i>purgeable</i>, matching About This Mac</em>
+</td>
+<td width="50%">
+  <img src="docs/screenshots/storage-categories.jpg"
+       alt="Categories view listing System Data 232 GB, Applications 20.9 GB, Developer 19.3 GB, Caches 9.6 GB, Photos, Mail and Trash.">
+  <br><em><b>Categories</b> — disjoint buckets, so nothing is counted twice</em>
+</td>
+</tr>
+<tr>
+<td width="50%">
+  <img src="docs/screenshots/memory.jpg"
+       alt="Memory tool showing 7.2 GB of 8.6 GB used, a warning pressure gauge, an hour of history and the top memory processes.">
+  <br><em><b>Memory</b> — pressure, 24h history, and what is eating it</em>
+</td>
+<td width="50%">
+  <img src="docs/screenshots/cpu.jpg"
+       alt="Processor tool showing 20 percent CPU usage with a history sparkline and an Activity Monitor style process list.">
+  <br><em><b>CPU</b> — per-core usage with quit and force-kill</em>
+</td>
+</tr>
+<tr>
+<td width="50%">
+  <img src="docs/screenshots/sensors.jpg"
+       alt="Sensors tool reading 83 degrees Celsius CPU and 84 degrees GPU from the SMC, with fan speed 4569 rpm and temperature history.">
+  <br><em><b>Sensors</b> — real SMC temperatures and fan speed</em>
+</td>
+<td width="50%">
+  <img src="docs/screenshots/battery.jpg"
+       alt="Battery tool showing 90 percent charged on AC power, condition Good, 179 cycles, 87 percent maximum capacity and energy tips.">
+  <br><em><b>Battery</b> — health, cycles, and Bluetooth device levels</em>
+</td>
+</tr>
+</table>
+
 ## 📦 Install
 
 1. **[Download the latest DMG](https://github.com/devShakib015/helm/releases/latest/download/Helm.dmg)**
