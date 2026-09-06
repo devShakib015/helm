@@ -33,6 +33,15 @@ It's a **multi-tool platform**: fifteen tools sharing one window, one menu-bar i
 
 <br>
 
+<div align="center">
+  <img src="docs/screenshots/storage-treemap.jpg" width="820"
+       alt="Storage explorer showing a squarified treemap of the Applications folder, 21.8 GB in total: Xcode is the largest block at 9.5 GB, then Android Studio 3.5 GB, CapCut 2.9 GB, Google Chrome 1.5 GB, and Visual Studio Code, Arc, Claude, WhatsApp and Spotify as progressively smaller rectangles, with a size-sorted list of the same folders beside it and a breadcrumb trail above.">
+  <br>
+  <em><b>Explorer</b> — a squarified treemap, drilled from the whole disk down to a single file; breadcrumbs climb back out</em>
+</div>
+
+<br>
+
 <table>
 <tr>
 <td width="50%">
