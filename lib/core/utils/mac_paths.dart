@@ -158,6 +158,53 @@ class MacPaths {
     return false;
   }
 
+  // ---- Deletion guard (last line of defense) --------------------------------
+
+  /// Container folders that may have their *contents* cleaned but must never
+  /// themselves be removed. Selecting one of these wholesale is always a bug
+  /// upstream, never a user's intent — e.g. a classification slip that sends
+  /// "~/Library/Caches" instead of the caches inside it.
+  static Set<String> get _neverDeleteRoots => {
+        '/', '/Users', '/Applications', '/Library', '/Volumes', '/private',
+        '/var', '/etc', '/opt', '/tmp', '/System', '/usr',
+        home,
+        desktop, documents, downloads, pictures, music, movies, publicFolder,
+        userLibrary, userCaches, userLogs, userAppSupport, userContainers,
+        userGroupContainers, userPreferences, savedAppState, userTrash,
+        userApplications, systemCaches, systemLogs,
+      };
+
+  /// Collapses `//`, strips a trailing slash, and trims whitespace so guard
+  /// comparisons can't be defeated by a cosmetic difference.
+  static String normalize(String path) {
+    var p = path.trim();
+    while (p.contains('//')) {
+      p = p.replaceAll('//', '/');
+    }
+    if (p.length > 1 && p.endsWith('/')) p = p.substring(0, p.length - 1);
+    return p;
+  }
+
+  /// The final check before Helm removes anything, anywhere. Deliberately
+  /// duplicated from the scanners' filtering: scanners decide what to *show*,
+  /// and a bug there must not be able to destroy data. Refuses relative paths,
+  /// traversal, OS internals, and the container roots above.
+  static bool isDeletionForbidden(String path) {
+    final p = normalize(path);
+    if (p.isEmpty || !p.startsWith('/')) return true; // relative or empty
+    if (p.contains('/../') || p.endsWith('/..')) return true; // traversal
+    if (_neverDeleteRoots.contains(p)) return true;
+    if (isProtected(p)) return true;
+    return false;
+  }
+
+  /// True when [path] sits inside the user's Trash — the only place Helm is
+  /// ever allowed to delete irreversibly.
+  static bool isInsideTrash(String path) {
+    final p = normalize(path);
+    return p.startsWith('${normalize(userTrash)}/');
+  }
+
   // ---- Sensitive data (never offered for cleanup) --------------------------
 
   /// Cache/support folder name prefixes that hold identity, account, session
