@@ -6,7 +6,7 @@
 
 A native macOS toolkit — fifteen tools in one window, from live system monitors to a storage explorer with a drill-down treemap.
 
-Free • Open Source (MIT) • Built with Flutter
+**Free forever** • Open Source (MIT) • Built with Flutter
 
 ### [⬇️ Download for macOS](https://github.com/devShakib015/helm/releases/latest/download/Helm.dmg)
 
@@ -114,6 +114,17 @@ xattr -dr com.apple.quarantine /Applications/Helm.app
 </details>
 
 > Helm is free and open source. No account, no telemetry, no network calls — nothing ever leaves your Mac.
+
+## 💚 Free forever
+
+Helm is **100% free, with every feature included, permanently.**
+
+No paid tier. No "pro" version. No subscription, no trial, no locked features,
+no upsell, no ads, no accounts. Every tool described below is in the app you
+download, and always will be — that is a commitment, not an introductory offer.
+
+It is also fully open source under the MIT licence: if you ever doubt any of
+the above, the entire thing is right here to read.
 
 > **Safe by design.** Helm never deletes destructively. Everything it removes goes to the **Trash**, so you can always get it back. The only exception is emptying the Trash itself — which you explicitly confirm.
 

@@ -4,32 +4,55 @@ All notable changes to Helm are documented here.
 
 ## [1.5.1] — 2026-08-26
 
-A reliability release. No new features — this one is about not wasting your
-battery and never touching anything it shouldn't.
+A reliability and safety release, following a full audit of the app. No new
+features — this one is about never touching the wrong thing, and not wasting
+your battery.
 
-### Fixed
+### Fixed — data safety
 
-- **Battery drain.** Once you opened the CPU page, Helm kept sampling the
-  process list every 4 seconds *forever* — even with the window closed and the
-  app idle in the menu bar. Each sample costs ~1.5s of work, so Helm was
-  running a background `top` roughly 38% of the time, permanently. Sampling now
-  starts and stops with the page: measured **zero** background sampling when
-  you're not looking at it.
-- The Bluetooth battery reader got the same treatment.
+- **The Uninstaller could delete a different app's data.** Leftover matching
+  treated any folder starting with the app's bundle id as belonging to it, and
+  sibling releases share that prefix — so removing Google Chrome offered to
+  delete **Chrome Beta's and Canary's** profiles, Visual Studio Code claimed
+  **VS Code Insiders**, and Firefox claimed **Developer Edition**. Ownership
+  now requires a segment boundary, and when several installed apps match a
+  folder the most specific one wins. Malformed bundle ids (a stub like `com`,
+  which would have matched most of your Library) are rejected outright.
+- **Deletions are now guarded at the point of removal**, and the guard sits at
+  the one place every tool passes through. Filesystem and container roots
+  (`/`, `/Users`, your home folder and its top-level folders), OS internals and
+  malformed paths are refused; permanent deletion is confined to the Trash.
+  Everything else remains recoverable in the Trash as always.
+- **Hard links are no longer reported as duplicates.** They are byte-identical
+  but are one file on disk, so deleting a "copy" freed nothing and could break
+  the tools that created the link — pnpm's store, Homebrew and `node_modules`
+  are all hard-link based, and the finder scans your whole home folder.
+- **Closed an AppleScript injection** in login-item removal: backslashes in an
+  item's name were not escaped, so a crafted app name could run its own script.
 
-### Hardened
+### Fixed — battery
 
-- **Deletion is now guarded at the point of deletion.** Previously the scanners
-  decided what was safe to *show*, and the deleter trusted whatever it was
-  handed — so a classification bug anywhere upstream could have removed the
-  wrong thing irreversibly. Every path is now re-checked immediately before
-  removal: filesystem and container roots (`/`, `/Users`, your home folder and
-  its top-level folders), OS internals, and anything malformed are refused
-  outright, and permanent deletion is confined to the Trash.
-- **72 automated tests** now lock these guarantees in place (up from 4),
-  covering the deletion guard, the login/account protect-list, and the
-  cleaner's selection rules.
+- Once you opened the CPU page, Helm kept sampling the process list every 4
+  seconds *forever*, even with the window closed and Helm idle in the menu bar.
+  Each sample costs ~1.5s of work, so it ran a background `top` roughly **38%
+  of the time, permanently**. Sampling now starts and stops with the page:
+  measured **zero** background sampling when you're not looking at it, and ~0%
+  CPU at rest. The Bluetooth battery reader got the same treatment.
 
+### Also
+
+- Settings ▸ About now shows the author, links, and Helm's standing promise:
+  free forever, every feature, no paid tier. Fixed a dead repository link.
+- **85 automated tests** now cover the deletion guard, the login/account
+  protect-list, the cleaner's selection rules, uninstaller ownership and the
+  AppleScript escaping (up from 4).
+
+### Known issue
+
+- Folder sizes over-count hard-linked content, so figures for hard-link-heavy
+  caches (notably the pnpm store) read larger than the space you would actually
+  reclaim. Nothing is ever deleted incorrectly because of it — the estimate is
+  simply optimistic. A fix needs inode-aware sizing and is planned.
 
 ## [1.5.0] — 2026-07-10
 
