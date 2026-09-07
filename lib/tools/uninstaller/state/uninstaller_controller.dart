@@ -86,7 +86,7 @@ class UninstallerController extends ChangeNotifier {
 
     List<Leftover> found;
     try {
-      found = await _service.findLeftovers(app);
+      found = await _service.findLeftovers(app, installed: apps);
     } catch (_) {
       found = const [];
     }

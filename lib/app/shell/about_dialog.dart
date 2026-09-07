@@ -5,6 +5,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/buttons.dart';
 import '../../core/widgets/glass_panel.dart';
+import '../../core/services/system_info_service.dart';
 import '../app_info.dart';
 
 Future<void> showAboutHelm(BuildContext context) {
@@ -51,11 +52,25 @@ Future<void> showAboutHelm(BuildContext context) {
               const Divider(color: AppColors.stroke),
               const SizedBox(height: Insets.md),
               Text(
-                '${AppInfo.copyright}\nReleased free under the MIT License.',
+                '${AppInfo.copyright} · ${AppInfo.license}\n'
+                'Made by ${AppInfo.authorHandle} — ${AppInfo.authorRole}',
                 textAlign: TextAlign.center,
                 style: AppType.caption.copyWith(color: AppColors.textTertiary),
               ),
               const SizedBox(height: Insets.xl),
+              Text(
+                AppInfo.freePledge,
+                textAlign: TextAlign.center,
+                style: AppType.caption.copyWith(color: AppColors.success),
+              ),
+              const SizedBox(height: Insets.lg),
+              HelmButton(
+                label: 'Visit devshakib.jumyn.com',
+                icon: Icons.north_east_rounded,
+                expand: true,
+                onPressed: () => SystemInfoService().openUrl(AppInfo.portfolio),
+              ),
+              const SizedBox(height: Insets.sm),
               HelmButton(
                 label: 'Close',
                 kind: HelmButtonKind.ghost,

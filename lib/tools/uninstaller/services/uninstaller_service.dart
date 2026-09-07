@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/services/shell.dart';
 import '../../../core/utils/mac_paths.dart';
 import '../models/installed_app.dart';
@@ -94,10 +96,24 @@ class UninstallerService {
   /// support locations. Matching is intentionally strict: a candidate's name
   /// (lowercased) must either start with the bundle id or contain the app's
   /// base name with spaces removed.
-  Future<List<Leftover>> findLeftovers(InstalledApp app) async {
-    final bundleId = app.bundleId.toLowerCase();
+  Future<List<Leftover>> findLeftovers(
+    InstalledApp app, {
+    List<InstalledApp> installed = const [],
+  }) async {
+    final bundleId = usableBundleId(app.bundleId);
     final appKey = app.name.toLowerCase().replaceAll(' ', '');
     final home = MacPaths.home;
+
+    // Bundle ids of the OTHER apps still installed. Sibling releases share a
+    // prefix (Chrome / Chrome Beta, VS Code / VS Code Insiders), so a folder
+    // one of them claims more specifically belongs to it — not to this app.
+    // Without this, uninstalling Chrome would offer to delete Chrome Beta's
+    // profile while Beta is still installed and in use.
+    final others = <String>[
+      for (final o in installed)
+        if (o.path != app.path && usableBundleId(o.bundleId).isNotEmpty)
+          usableBundleId(o.bundleId),
+    ];
 
     final found = <_Candidate>[];
     final seen = <String>{};
@@ -111,8 +127,17 @@ class UninstallerService {
     final letter = RegExp(r'[a-z]');
     bool matches(String childName) {
       final lower = childName.toLowerCase();
-      // Strongest signal: a reverse-DNS name beginning with the bundle id.
-      if (bundleId.isNotEmpty && lower.startsWith(bundleId)) return true;
+      // Strongest signal: a reverse-DNS name beginning with the bundle id —
+      // but only at a segment boundary, and only when no sibling app claims
+      // it more specifically.
+      if (bundleId.isNotEmpty && bundlePrefix(lower, bundleId)) {
+        for (final other in others) {
+          if (other.length > bundleId.length && bundlePrefix(lower, other)) {
+            return false; // belongs to that still-installed app
+          }
+        }
+        return true;
+      }
       if (appKey.length < 3) return false;
       // Name match must be at a token boundary, never a loose substring — else
       // a short app like "Arc" wrongly matches "seArch"/"theunArchiver". Accept
@@ -193,6 +218,29 @@ class UninstallerService {
 
     sized.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
     return sized;
+  }
+
+  /// A bundle id is only trustworthy as a match key when it is a real
+  /// reverse-DNS identifier. A stub like "com" or "a" would prefix-match a
+  /// huge share of the user's Library, so such ids are discarded and matching
+  /// falls back to the (much stricter) app-name rule.
+  @visibleForTesting
+  static String usableBundleId(String raw) {
+    final b = raw.trim().toLowerCase();
+    if (b.length < 6 || !b.contains('.')) return '';
+    if (b.split('.').where((p) => p.isNotEmpty).length < 2) return '';
+    return b;
+  }
+
+  /// True when [name] is [bundleId] itself, or sits under it at a segment
+  /// boundary: "com.acme.app" matches "com.acme.app.helper" but never
+  /// "com.acme.applesauce" (a different app that merely shares a prefix).
+  @visibleForTesting
+  static bool bundlePrefix(String name, String bundleId) {
+    if (!name.startsWith(bundleId)) return false;
+    if (name.length == bundleId.length) return true;
+    final next = name[bundleId.length];
+    return next == '.' || next == '-' || next == '_' || next == ' ';
   }
 
   /// Immediate children of [dir] as (path, name) records. Empty on failure.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/services/native_system.dart';
+import '../../core/services/system_info_service.dart';
 import '../../core/services/shell.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
@@ -696,7 +697,8 @@ class _StepButton extends StatelessWidget {
   }
 }
 
-/// The footer card: logo, name, version and a one-line credit.
+/// The footer card: what Helm is, who made it, and where to find them.
+/// Everything here comes from [AppInfo] — see that file to change any of it.
 class _AboutPanel extends StatelessWidget {
   const _AboutPanel();
 
@@ -704,37 +706,165 @@ class _AboutPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return GlassPanel(
       padding: const EdgeInsets.all(Insets.lg),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(Radii.md),
-            child: Image.asset(
-              'assets/helm_logo.png',
-              width: 48,
-              height: 48,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(Radii.md),
+                child: Image.asset('assets/helm_logo.png',
+                    width: 52, height: 52),
+              ),
+              const SizedBox(width: Insets.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(AppInfo.name, style: AppType.headline),
+                        const SizedBox(width: 6),
+                        Text('Version ${AppInfo.version}',
+                            style: AppType.caption),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${AppInfo.license} · by ${AppInfo.authorHandle}'
+                      ' (${AppInfo.author})',
+                      style: AppType.caption
+                          .copyWith(color: AppColors.textTertiary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: Insets.lg),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: Insets.md),
+
+          // The promise, stated plainly rather than buried in marketing.
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+                horizontal: Insets.md, vertical: Insets.sm),
+            decoration: BoxDecoration(
+              color: AppColors.success.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(Radii.sm),
+              border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.28)),
+            ),
+            child: Row(
               children: [
-                Text('Helm', style: AppType.headline),
-                const SizedBox(height: 2),
-                Text('Version ${AppInfo.version}', style: AppType.caption),
-                const SizedBox(height: 4),
-                Text(
-                  'A premium macOS toolkit · MIT License · by Shakib',
-                  style: AppType.caption.copyWith(
-                    color: AppColors.textTertiary,
+                const Icon(Icons.volunteer_activism_rounded,
+                    size: 15, color: AppColors.success),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Text(
+                    AppInfo.freePledge,
+                    style: AppType.caption
+                        .copyWith(color: AppColors.textSecondary),
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: Insets.md),
+
+          Text('MADE BY ${AppInfo.authorHandle.toUpperCase()}',
+              style: AppType.micro),
+          const SizedBox(height: 2),
+          Text(AppInfo.authorRole,
+              style:
+                  AppType.caption.copyWith(color: AppColors.textTertiary)),
+          const SizedBox(height: Insets.sm),
+          Wrap(
+            spacing: Insets.sm,
+            runSpacing: Insets.sm,
+            children: [
+              for (final l in AppInfo.authorLinks)
+                _LinkChip(
+                  label: l.label,
+                  url: l.url,
+                  primary: l.url == AppInfo.portfolio,
+                ),
+            ],
+          ),
+          const SizedBox(height: Insets.md),
+          Divider(height: 1, color: AppColors.stroke.withValues(alpha: 0.6)),
+          const SizedBox(height: Insets.md),
+          Wrap(
+            spacing: Insets.sm,
+            runSpacing: Insets.sm,
+            children: const [
+              _LinkChip(label: 'Source code', url: AppInfo.repo),
+              _LinkChip(label: 'Report an issue', url: AppInfo.issues),
+              _LinkChip(label: 'Latest release', url: AppInfo.releases),
+            ],
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// A small pill that opens a URL in the user's browser.
+class _LinkChip extends StatelessWidget {
+  const _LinkChip({
+    required this.label,
+    required this.url,
+    this.primary = false,
+  });
+
+  final String label;
+  final String url;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Hoverable(
+      onTap: () => SystemInfoService().openUrl(url),
+      builder: (context, hovered, _) {
+        final tint = primary ? AppColors.accent : AppColors.textSecondary;
+        return AnimatedContainer(
+          duration: Motion.fast,
+          padding: const EdgeInsets.symmetric(
+              horizontal: Insets.md, vertical: 6),
+          decoration: BoxDecoration(
+            color: primary
+                ? AppColors.accent.withValues(alpha: hovered ? 0.26 : 0.16)
+                : (hovered ? AppColors.glassHover : AppColors.glass),
+            borderRadius: Radii.pill,
+            border: Border.all(
+              color: primary
+                  ? AppColors.accent.withValues(alpha: 0.5)
+                  : (hovered ? AppColors.strokeStrong : AppColors.stroke),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: AppType.caption.copyWith(
+                  color: primary ? AppColors.accent : tint,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.north_east_rounded,
+                  size: 11,
+                  color: primary
+                      ? AppColors.accent
+                      : AppColors.textTertiary),
+            ],
+          ),
+        );
+      },
     );
   }
 }
