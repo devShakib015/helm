@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helm/core/services/deletion_service.dart';
+import 'package:helm/core/services/native_bridge.dart';
 import 'package:helm/core/utils/mac_paths.dart';
 
 /// These tests guard the single most dangerous thing Helm does: removing
@@ -141,6 +142,24 @@ void main() {
       ]) {
         expect(MacPaths.isSensitiveName(n), isFalse, reason: n);
       }
+    });
+  });
+
+  group('NativeBridge is the chokepoint every tool shares', () {
+    // The Uninstaller, Privacy and Startup call NativeBridge directly rather
+    // than going through DeletionService, so the guard has to live here or it
+    // simply is not enforced for three of the four deletion paths.
+    test('refuses forbidden paths without ever reaching the platform', () async {
+      final targets = ['/', '/System/Library', home, '$home/Library', ''];
+      final r = await NativeBridge.moveToTrash(targets);
+      expect(r.trashed, isEmpty);
+      expect(r.failed.toSet(), targets.toSet());
+    });
+
+    test('an empty request is a no-op', () async {
+      final r = await NativeBridge.moveToTrash([]);
+      expect(r.trashed, isEmpty);
+      expect(r.failed, isEmpty);
     });
   });
 }
