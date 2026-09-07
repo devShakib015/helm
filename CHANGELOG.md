@@ -2,6 +2,35 @@
 
 All notable changes to Helm are documented here.
 
+## [1.5.1] — 2026-08-26
+
+A reliability release. No new features — this one is about not wasting your
+battery and never touching anything it shouldn't.
+
+### Fixed
+
+- **Battery drain.** Once you opened the CPU page, Helm kept sampling the
+  process list every 4 seconds *forever* — even with the window closed and the
+  app idle in the menu bar. Each sample costs ~1.5s of work, so Helm was
+  running a background `top` roughly 38% of the time, permanently. Sampling now
+  starts and stops with the page: measured **zero** background sampling when
+  you're not looking at it.
+- The Bluetooth battery reader got the same treatment.
+
+### Hardened
+
+- **Deletion is now guarded at the point of deletion.** Previously the scanners
+  decided what was safe to *show*, and the deleter trusted whatever it was
+  handed — so a classification bug anywhere upstream could have removed the
+  wrong thing irreversibly. Every path is now re-checked immediately before
+  removal: filesystem and container roots (`/`, `/Users`, your home folder and
+  its top-level folders), OS internals, and anything malformed are refused
+  outright, and permanent deletion is confined to the Trash.
+- **72 automated tests** now lock these guarantees in place (up from 4),
+  covering the deletion guard, the login/account protect-list, and the
+  cleaner's selection rules.
+
+
 ## [1.5.0] — 2026-07-10
 
 The clipboard goes instant, monitoring goes deep, and Helm starts watching your Mac for you.
