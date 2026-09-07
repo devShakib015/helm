@@ -4,7 +4,7 @@
 
 ### Take the helm of your Mac.
 
-A premium, native macOS management toolkit — starting with a complete **Storage Manager & Cleaner**, built to grow into a full suite of Mac tools.
+A native macOS toolkit — fifteen tools in one window, from live system monitors to a storage explorer with a drill-down treemap.
 
 Free • Open Source (MIT) • Built with Flutter
 
@@ -18,7 +18,7 @@ macOS 12 Monterey or later · Apple Silicon & Intel · ~20 MB
 
 ## What is Helm?
 
-**Helm** is a beautiful, fast, all-in-one utility for macOS. One app that replaces a folder full of them — system monitoring, disk cleaning, clipboard history, and a dozen everyday tools, all in the same premium shell.
+**Helm** is an all-in-one utility for macOS. One app that replaces a folder full of them — system monitoring, disk cleaning, clipboard history, and a dozen everyday tools.
 
 It's a **multi-tool platform**: fifteen tools sharing one window, one menu-bar item, and one design language.
 
@@ -146,7 +146,7 @@ lib/
 │  ├─ models/            # pure-Dart, isolate-safe data models
 │  ├─ services/          # native bridge, permissions, deletion, system info
 │  ├─ theme/             # colors, typography, spacing
-│  └─ widgets/           # reusable premium widgets
+│  └─ widgets/           # reusable widgets
 └─ tools/
    └─ storage/           # the Storage tool (self-contained)
       ├─ engine/         # isolate-based scanners (category, junk, large, dup)
