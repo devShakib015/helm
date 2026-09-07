@@ -148,11 +148,17 @@ void duplicateScanEntry(ScanBoot<DuplicateScanArgs> boot) {
       flush();
       for (final fullGroup in byFull.entries) {
         if (fullGroup.value.length < 2) continue;
+        // Hard links are byte-identical but are ONE file on disk: deleting a
+        // "copy" frees nothing and can break tools that rely on the link
+        // (pnpm's store, Homebrew, node_modules). Collapse each inode to a
+        // single representative, and drop the set if nothing real is left.
+        final unique = _collapseHardLinks(fullGroup.value);
+        if (unique.length < 2) continue;
         sets.add(DuplicateSet(
           hash: fullGroup.key,
           sizeBytes: size,
           files: [
-            for (final c in fullGroup.value)
+            for (final c in unique)
               FileEntry(
                 path: c.path,
                 name: c.path.split('/').last,
@@ -167,6 +173,40 @@ void duplicateScanEntry(ScanBoot<DuplicateScanArgs> boot) {
 
   sets.sort((a, b) => b.reclaimableBytes.compareTo(a.reclaimableBytes));
   send.send(ScanResultMsg(sets));
+}
+
+/// Collapses candidates that are hard links to the same file.
+///
+/// Dart's [FileStat] exposes no inode, so the device+inode pair is read with a
+/// single batched `stat` call — cheap here because this only ever runs on a
+/// handful of already-matched duplicates, never the whole scan. If `stat` is
+/// unavailable the input is returned untouched: the finder still guarantees at
+/// least one copy survives, so the worst case is the old behaviour.
+List<_Candidate> _collapseHardLinks(List<_Candidate> candidates) {
+  if (candidates.length < 2) return candidates;
+  try {
+    final res = Process.runSync(
+      '/usr/bin/stat',
+      ['-f', '%d:%i', ...candidates.map((c) => c.path)],
+    );
+    if (res.exitCode != 0) return candidates;
+    final ids = (res.stdout as String).trim().split('\n');
+    if (ids.length != candidates.length) return candidates;
+    final seen = <String>{};
+    final out = <_Candidate>[];
+    for (var i = 0; i < candidates.length; i++) {
+      final id = ids[i].trim();
+      // An unreadable id must not silently merge distinct files.
+      if (id.isEmpty || !seen.add(id)) {
+        if (id.isEmpty) out.add(candidates[i]);
+        continue;
+      }
+      out.add(candidates[i]);
+    }
+    return out;
+  } catch (_) {
+    return candidates;
+  }
 }
 
 bool _isBundle(String path) {
