@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import '../../../core/services/native_bridge.dart';
+import 'package:flutter/foundation.dart';
+
 import '../../../core/services/shell.dart';
 import '../../../core/utils/mac_paths.dart';
 import '../models/startup_item.dart';
@@ -140,7 +142,7 @@ class StartupService {
   /// success.
   Future<bool> removeLoginItem(String name) async {
     try {
-      final escaped = name.replaceAll('"', '\\"');
+      final escaped = escapeAppleScript(name);
       final r = await Shell.run('osascript', [
         '-e',
         'tell application "System Events" to delete login item "$escaped"',
@@ -166,6 +168,17 @@ class StartupService {
   }
 
   // ---- Helpers ------------------------------------------------------------
+
+  /// Escapes a value for embedding in an AppleScript string literal.
+  ///
+  /// The backslash must be escaped FIRST, otherwise escaping the quote
+  /// introduces backslashes that are themselves re-interpreted. Login-item
+  /// names come from installed apps, so a crafted name could otherwise break
+  /// out of the string and run arbitrary AppleScript.
+  @visibleForTesting
+  static String escapeAppleScript(String value) =>
+      value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+
 
   /// AppleScript returns lists as comma-and-space separated text. Splits and
   /// trims, dropping empties.
