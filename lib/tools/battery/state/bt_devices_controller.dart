@@ -26,9 +26,23 @@ class BtDevice {
 /// per-component levels there) and `ioreg`'s HID battery info (Apple input
 /// devices). Polled every 60 s — `system_profiler` is slow, so never more.
 class BtDevicesController extends ChangeNotifier {
-  BtDevicesController() {
+  /// `system_profiler` is a heavyweight command, so it only runs while a page
+  /// is actually showing device batteries. Pages call [activate]/[deactivate].
+  int _watchers = 0;
+
+  void activate() {
+    _watchers++;
+    if (_timer != null) return;
     _tick();
     _timer = Timer.periodic(const Duration(seconds: 60), (_) => _tick());
+  }
+
+  void deactivate() {
+    if (_watchers > 0) _watchers--;
+    if (_watchers == 0) {
+      _timer?.cancel();
+      _timer = null;
+    }
   }
 
   List<BtDevice> devices = const [];

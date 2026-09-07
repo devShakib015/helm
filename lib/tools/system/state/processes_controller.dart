@@ -25,10 +25,31 @@ enum ProcSort { cpu, memory }
 /// the CURRENT interval like Activity Monitor — `ps`'s %cpu is a lifetime
 /// average and reads absurdly low). Polls every 4s; quit/force-kill included.
 class ProcessesController extends ChangeNotifier {
-  ProcessesController() {
+  /// Nothing is sampled until a visible page asks for it. `top -l 2` spends
+  /// ~1.5s sampling per call, so polling it every 4s regardless of whether
+  /// anyone is looking would burn CPU and battery for the entire time Helm
+  /// sits in the menu bar. Pages call [activate] / [deactivate].
+  int _watchers = 0;
+
+  /// Begins (or joins) live sampling. Safe to call from several pages.
+  void activate() {
+    _watchers++;
+    if (_timer != null) return;
     _tick();
     _timer = Timer.periodic(const Duration(seconds: 4), (_) => _tick());
   }
+
+  /// Releases one watcher; sampling stops once the last page goes away.
+  void deactivate() {
+    if (_watchers > 0) _watchers--;
+    if (_watchers == 0) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  /// True while sampling is actually running.
+  bool get isLive => _timer != null;
 
   static const int _rows = 30;
 

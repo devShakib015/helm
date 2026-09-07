@@ -12,10 +12,38 @@ import '../state/processes_controller.dart';
 
 /// Activity-Monitor-lite: the busiest processes with live CPU/MEM, search,
 /// sort, and Quit / Force Kill on hover.
-class ProcessesPanel extends StatelessWidget {
+class ProcessesPanel extends StatefulWidget {
   const ProcessesPanel({super.key, required this.accent});
 
   final Color accent;
+
+  @override
+  State<ProcessesPanel> createState() => _ProcessesPanelState();
+}
+
+class _ProcessesPanelState extends State<ProcessesPanel> {
+  ProcessesController? _controller;
+
+  /// Sampling is tied to this page being on screen — `top` is far too
+  /// expensive to run while Helm is just sitting in the menu bar.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final c = context.read<ProcessesController>();
+    if (!identical(c, _controller)) {
+      _controller?.deactivate();
+      _controller = c;
+      c.activate();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.deactivate();
+    super.dispose();
+  }
+
+  Color get accent => widget.accent;
 
   Future<void> _kill(
       BuildContext context, ProcessesController c, ProcInfo p,

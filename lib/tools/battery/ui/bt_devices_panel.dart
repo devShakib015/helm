@@ -10,8 +10,32 @@ import '../state/bt_devices_controller.dart';
 /// Battery levels of connected Bluetooth devices (AirPods, Magic Keyboard,
 /// Magic Mouse…). Renders nothing when no device reports a battery, so it can
 /// be dropped into any page unconditionally.
-class BtDevicesPanel extends StatelessWidget {
+class BtDevicesPanel extends StatefulWidget {
   const BtDevicesPanel({super.key});
+
+  @override
+  State<BtDevicesPanel> createState() => _BtDevicesPanelState();
+}
+
+class _BtDevicesPanelState extends State<BtDevicesPanel> {
+  BtDevicesController? _controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final c = context.read<BtDevicesController>();
+    if (!identical(c, _controller)) {
+      _controller?.deactivate();
+      _controller = c;
+      c.activate();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.deactivate();
+    super.dispose();
+  }
 
   static IconData _icon(BtDevice d) {
     final k = '${d.kind} ${d.name}'.toLowerCase();
@@ -73,10 +97,10 @@ class _DeviceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = BtDevicesPanel._levelColor(device.percent);
+    final color = _BtDevicesPanelState._levelColor(device.percent);
     return Row(
       children: [
-        Icon(BtDevicesPanel._icon(device),
+        Icon(_BtDevicesPanelState._icon(device),
             size: 16, color: AppColors.textSecondary),
         const SizedBox(width: Insets.md),
         SizedBox(
