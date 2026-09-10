@@ -6,7 +6,7 @@ import 'package:crypto/crypto.dart';
 import '../../../core/models/duplicate_set.dart';
 import '../../../core/models/file_entry.dart';
 import '../../../core/utils/mac_paths.dart';
-import 'native_stat.dart';
+import '../../../core/utils/native_stat.dart';
 import 'scan_session.dart';
 
 class DuplicateScanArgs {

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import '../../../core/models/scan_node.dart';
 import '../../../core/utils/mac_paths.dart';
-import 'native_stat.dart';
+import '../../../core/utils/native_stat.dart';
 
 /// Pure filesystem walking primitives shared by every scanner. No Flutter
 /// imports — these run inside background isolates.

@@ -39,6 +39,7 @@ class FileFacts {
     required this.allocatedBytes,
     required this.logicalBytes,
     required this.modifiedMs,
+    this.flags = 0,
   });
 
   /// What the file costs the disk — `st_blocks * 512`. POSIX fixes that unit at
@@ -54,7 +55,33 @@ class FileFacts {
   final int logicalBytes;
 
   final int modifiedMs;
+
+  /// `st_flags`. Only a few bits matter here, and they are the ones that decide
+  /// whether an item can be removed at all — which is a different question from
+  /// whether the current user has permission.
+  final int flags;
+
+  /// True when macOS refuses removal for everyone, not just for this user.
+  ///
+  /// `SF_RESTRICTED` is System Integrity Protection; `SF_IMMUTABLE` and
+  /// `SF_NOUNLINK` are the system-level immutable and un-unlinkable flags.
+  /// None of the three can be cleared without booting into Recovery, so an
+  /// item carrying any of them is one an uninstaller should not offer: the
+  /// removal cannot succeed, and an offer that cannot succeed is worse than
+  /// no offer. `/Applications/Safari.app` carries UF_HIDDEN | SF_RESTRICTED.
+  ///
+  /// Deliberately excludes `UF_IMMUTABLE` (`chflags uchg`), which the user set
+  /// and the user can clear.
+  bool get isSystemLocked =>
+      flags & (sfImmutable | sfRestricted | sfNoUnlink) != 0;
 }
+
+/// `st_flags` bits, from `sys/stat.h`. Verified against the filesystem rather
+/// than copied: `/Applications/Safari.app` reads 0x00088000 and `/Applications`
+/// itself reads 0x00100000.
+const int sfImmutable = 0x00020000;
+const int sfRestricted = 0x00080000;
+const int sfNoUnlink = 0x00100000;
 
 /// POSIX fixes `st_blocks` in 512-byte units. Not `st_blksize`.
 const int _blockUnit = 512;
@@ -216,10 +243,11 @@ _Stat? _rawStat(_LstatDart fn, String path) {
 /// [FileFacts] for [path].
 ///
 /// Falls back to Dart's own `stat` when the native call is unavailable, in
-/// which case [FileFacts.allocatedBytes] degrades to `st_size` — the old
-/// behaviour, which is wrong in the ways described above but never worse than
-/// what shipped before. Returns null only when the file cannot be stat'd at
-/// all, which callers already have to handle.
+/// which case [FileFacts.allocatedBytes] degrades to `st_size` and
+/// [FileFacts.flags] to 0 — the old behaviour, which is wrong in the ways
+/// described above but never worse than what shipped before. Returns null only
+/// when the file cannot be stat'd at all, which callers already have to
+/// handle.
 FileFacts? factsFor(String path) {
   _init();
   final fn = _lstat;
@@ -231,6 +259,7 @@ FileFacts? factsFor(String path) {
         logicalBytes: st.stSize,
         modifiedMs: st.stMtimespec.tvSec * 1000 +
             st.stMtimespec.tvNsec ~/ 1000000,
+        flags: st.stFlags,
       );
     }
     return null;

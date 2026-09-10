@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/services/shell.dart';
 import '../../../core/utils/mac_paths.dart';
+import '../../../core/utils/native_stat.dart';
 import '../models/installed_app.dart';
 
 /// Reads the list of installed applications and finds the scattered support
@@ -33,15 +34,42 @@ class UninstallerService {
     return result;
   }
 
-  /// Lists the immediate `.app` bundle paths inside [dir]. Returns an empty
-  /// list if the directory is missing or unreadable.
+  /// Lists the immediate `.app` bundle paths inside [dir] that Helm could
+  /// actually uninstall. Returns an empty list if the directory is missing or
+  /// unreadable.
+  ///
+  /// The name ending in `.app` was the only test, and it let through three
+  /// things that are not removable applications:
+  ///
+  ///   * **Symlinks.** `/Applications/Safari.app` is one — a link into
+  ///     `/System/Cryptexes`, on the read-only system volume. It listed at 0 B,
+  ///     and picking it offered a removal that could never succeed. Even where
+  ///     the target is real, trashing a link removes the shortcut and leaves
+  ///     the app, which is not what "uninstall" means.
+  ///   * **Folders that merely end in `.app`.** Without `Contents/Info.plist`
+  ///     there is no bundle id, so no leftover can be matched to it and the
+  ///     entry can only ever offer to delete itself.
+  ///   * **Anything the system has locked.** SIP-restricted, system-immutable
+  ///     or un-unlinkable items cannot be removed by anyone short of booting
+  ///     into Recovery — see [FileFacts.isSystemLocked].
+  ///
+  /// Filtering here rather than at removal time is deliberate: the Uninstaller
+  /// now explains a refusal properly, but the better outcome is not to offer
+  /// something that was never going to work.
   List<String> _appBundlesIn(String dir) {
     try {
       final d = Directory(dir);
       if (!d.existsSync()) return const [];
       final out = <String>[];
       for (final entry in d.listSync(followLinks: false)) {
-        if (entry.path.endsWith('.app')) out.add(entry.path);
+        if (!entry.path.endsWith('.app')) continue;
+        // listSync(followLinks: false) yields a Link for a symlink, so this
+        // rejects Safari without a separate symlink test.
+        if (entry is! Directory) continue;
+        if (!File('${entry.path}/Contents/Info.plist').existsSync()) continue;
+        final facts = factsFor(entry.path);
+        if (facts != null && facts.isSystemLocked) continue;
+        out.add(entry.path);
       }
       return out;
     } catch (_) {

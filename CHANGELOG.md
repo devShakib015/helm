@@ -4,6 +4,23 @@ All notable changes to Helm are documented here.
 
 ## [Unreleased]
 
+### Fixed — the Uninstaller offering things it cannot remove
+
+- **Safari was in the list, at 0 B.** `/Applications/Safari.app` is a symlink
+  into `/System/Cryptexes` on the read-only system volume, carrying
+  `SF_RESTRICTED` — System Integrity Protection. Selecting it offered a removal
+  that could not happen under any circumstances. The only test being applied was
+  that the name ended in `.app`, which also let through folders that merely end
+  in `.app` (no `Contents/Info.plist`, so no bundle id, so no leftover could
+  ever be matched to them) and symlinks in general, where trashing the link
+  removes a shortcut and leaves the application exactly where it was.
+
+  The list is now what it always claimed to be: real bundles, on this disk, that
+  a removal could actually reach. Filtering at listing time rather than at
+  removal time is the point — a refusal is now explained properly, but not
+  offering something that was never going to work is better than explaining it
+  afterwards.
+
 ### Fixed — removals that said only "skipped"
 
 - **"1 skipped" never said why, and for a lot of apps it said it every time.**

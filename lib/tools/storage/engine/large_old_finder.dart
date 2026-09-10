@@ -2,7 +2,7 @@ import 'dart:io';
 
 import '../../../core/models/file_entry.dart';
 import '../../../core/utils/mac_paths.dart';
-import 'native_stat.dart';
+import '../../../core/utils/native_stat.dart';
 import 'scan_session.dart';
 
 /// Arguments for the large-files scan.

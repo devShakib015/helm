@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helm/tools/storage/engine/fs_util.dart';
-import 'package:helm/tools/storage/engine/native_stat.dart';
+import 'package:helm/core/utils/native_stat.dart';
 
 /// The storage tool answers "what does this cost me", not "what does this
 /// contain". Everything below is a case where those two numbers disagree, and
