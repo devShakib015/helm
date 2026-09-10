@@ -2,9 +2,17 @@ import 'dart:io';
 
 import '../../../core/models/scan_node.dart';
 import '../../../core/utils/mac_paths.dart';
+import 'native_stat.dart';
 
 /// Pure filesystem walking primitives shared by every scanner. No Flutter
 /// imports — these run inside background isolates.
+///
+/// Every byte count here is **allocated** size (`st_blocks * 512`), not
+/// `st_size`. That is the difference between what a file contains and what it
+/// costs the disk, and a storage tool is answering the second question — see
+/// [factsFor]. It is why these totals can be lower than Finder's for a
+/// compressed app bundle and higher for a folder with a custom icon, and why
+/// they reconcile against the volume's own occupied figure.
 ///
 /// Symlinks are never followed: `listSync(followLinks: false)` yields [Link]
 /// objects for symlinks, which we skip. That avoids infinite loops and the
@@ -98,15 +106,10 @@ class FsUtil {
       if (MacPaths.isProtected(p)) continue;
 
       if (e is File) {
-        int size = 0;
-        int? mtime;
-        try {
-          final st = e.statSync();
-          size = st.size;
-          mtime = st.modified.millisecondsSinceEpoch;
-        } catch (_) {
-          continue;
-        }
+        final facts = factsFor(p);
+        if (facts == null) continue;
+        final size = facts.allocatedBytes;
+        final mtime = facts.modifiedMs;
         node.children.add(ScanNode(
           path: p,
           name: _basename(p),
@@ -158,13 +161,10 @@ class FsUtil {
     final type = FileSystemEntity.typeSync(path, followLinks: false);
     if (type == FileSystemEntityType.notFound) return (bytes: 0, files: 0);
     if (type == FileSystemEntityType.file) {
-      try {
-        final s = File(path).statSync().size;
-        onProgress?.call(s, 1, null);
-        return (bytes: s, files: 1);
-      } catch (_) {
-        return (bytes: 0, files: 0);
-      }
+      final facts = factsFor(path);
+      if (facts == null) return (bytes: 0, files: 0);
+      onProgress?.call(facts.allocatedBytes, 1, null);
+      return (bytes: facts.allocatedBytes, files: 1);
     }
     if (type == FileSystemEntityType.link) return (bytes: 0, files: 0);
     return _measureFast(path, onProgress: onProgress, isCancelled: isCancelled);
@@ -193,12 +193,12 @@ class FsUtil {
       for (final e in entries) {
         if (e is Link) continue;
         if (e is File) {
-          try {
-            final s = e.statSync().size;
-            bytes += s;
+          final facts = factsFor(e.path);
+          if (facts != null) {
+            bytes += facts.allocatedBytes;
             files += 1;
-            onProgress?.call(s, 1, null);
-          } catch (_) {}
+            onProgress?.call(facts.allocatedBytes, 1, null);
+          }
         } else if (e is Directory) {
           stack.add(e.path);
         }
@@ -227,17 +227,17 @@ class FsUtil {
       if (e is Link) continue;
       final p = e.path;
       if (e is File) {
-        try {
-          final st = e.statSync();
+        final facts = factsFor(p);
+        if (facts != null) {
           out.add((
             path: p,
             name: _basename(p),
-            bytes: st.size,
+            bytes: facts.allocatedBytes,
             files: 1,
-            mtime: st.modified.millisecondsSinceEpoch
+            mtime: facts.modifiedMs
           ));
-          onProgress?.call(st.size, 1, null);
-        } catch (_) {}
+          onProgress?.call(facts.allocatedBytes, 1, null);
+        }
       } else if (e is Directory) {
         final m = _measureFast(p, onProgress: onProgress, isCancelled: isCancelled);
         out.add((

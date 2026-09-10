@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../../../core/models/file_entry.dart';
 import '../../../core/utils/mac_paths.dart';
+import 'native_stat.dart';
 import 'scan_session.dart';
 
 /// Arguments for the large-files scan.
@@ -48,20 +49,24 @@ void largeScanEntry(ScanBoot<LargeScanArgs> boot) {
         if (_isBundle(e.path)) continue;
         stack.add(e.path);
       } else if (e is File) {
-        try {
-          final st = e.statSync();
+        // Threshold and reported size are both allocated size, so a file the
+        // treemap draws at 40 MB cannot also appear here as 154 MB. The user is
+        // hunting for space to reclaim, and a compressed or sparse file gives
+        // back what it occupies, not what it contains.
+        final facts = factsFor(e.path);
+        if (facts != null) {
           pendFiles += 1;
-          if (st.size >= args.minBytes) {
+          if (facts.allocatedBytes >= args.minBytes) {
             found.add(FileEntry(
               path: e.path,
               name: e.path.split('/').last,
-              sizeBytes: st.size,
-              modifiedMs: st.modified.millisecondsSinceEpoch,
+              sizeBytes: facts.allocatedBytes,
+              modifiedMs: facts.modifiedMs,
             ));
-            pendBytes += st.size;
+            pendBytes += facts.allocatedBytes;
           }
           flush();
-        } catch (_) {}
+        }
       }
     }
   }

@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import '../../../core/models/duplicate_set.dart';
 import '../../../core/models/file_entry.dart';
 import '../../../core/utils/mac_paths.dart';
+import 'native_stat.dart';
 import 'scan_session.dart';
 
 class DuplicateScanArgs {
@@ -15,9 +16,13 @@ class DuplicateScanArgs {
 }
 
 class _Candidate {
-  _Candidate(this.path, this.mtime);
+  _Candidate(this.path, this.mtime, this.allocBytes);
   final String path;
   final int? mtime;
+
+  /// What this particular copy costs the disk. Carried per candidate rather
+  /// than per set: identical content does not imply identical allocation.
+  final int allocBytes;
 }
 
 /// Minimal [Sink] to capture the digest from a chunked hash conversion without
@@ -104,16 +109,19 @@ void duplicateScanEntry(ScanBoot<DuplicateScanArgs> boot) {
         if (_isBundle(e.path)) continue;
         stack.add(e.path);
       } else if (e is File) {
-        try {
-          final st = e.statSync();
+        // Bucketed on LOGICAL size, not allocated: byte-identical files always
+        // agree on st_size, and can disagree on st_blocks when one of them is
+        // compressed. Bucketing on allocation would file two identical copies
+        // into different buckets and miss the duplicate entirely.
+        final facts = factsFor(e.path);
+        if (facts != null) {
           pendFiles += 1;
-          if (st.size >= args.minBytes) {
-            bySize
-                .putIfAbsent(st.size, () => <_Candidate>[])
-                .add(_Candidate(e.path, st.modified.millisecondsSinceEpoch));
+          if (facts.logicalBytes >= args.minBytes) {
+            bySize.putIfAbsent(facts.logicalBytes, () => <_Candidate>[]).add(
+                _Candidate(e.path, facts.modifiedMs, facts.allocatedBytes));
           }
           flush();
-        } catch (_) {}
+        }
       }
     }
   }
@@ -162,7 +170,7 @@ void duplicateScanEntry(ScanBoot<DuplicateScanArgs> boot) {
               FileEntry(
                 path: c.path,
                 name: c.path.split('/').last,
-                sizeBytes: size,
+                sizeBytes: c.allocBytes,
                 modifiedMs: c.mtime,
               )
           ],

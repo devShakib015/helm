@@ -37,6 +37,10 @@ dependencies:
   provider: ^6.1.5+1
   macos_window_utils: ^1.9.1
   crypto: ^3.0.7
+  # Only for calloc/free around the lstat(2) call in
+  # lib/tools/storage/engine/native_stat.dart. dart:ffi itself is built in;
+  # this is the allocator it deliberately does not ship.
+  ffi: ^2.1.4
   path: ^1.9.1
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5

@@ -2,6 +2,51 @@
 
 All notable changes to Helm are documented here.
 
+## [Unreleased]
+
+### Fixed — the numbers
+
+- **Storage measured what files contain, not what they cost.** Every total, every
+  treemap rectangle and every "space you'd get back" figure summed `st_size`,
+  which describes a file's *contents*. A disk tool is answering a different
+  question, and the two answers come apart in three directions at once on macOS:
+
+  - **Files with a resource fork read as free.** The `Icon\r` file macOS writes
+    into every folder with a custom icon reports **0 bytes** and occupies
+    **61,440** — the icon lives in `com.apple.ResourceFork`, which `st_size`
+    does not describe. One per folder, invisible.
+  - **Compressed files were overstated.** macOS transparently compresses much of
+    `/System` and many app bundles. `/bin/ls` reports 154,208 bytes and occupies
+    40,960.
+  - **Sparse files were wildly overstated.** A 50 MB sparse file reports
+    52,428,800 bytes and occupies 16,384.
+
+  And beneath all three, small files were undercounted for a simpler reason:
+  a 100-byte file costs a whole 4 KB block. Across a folder of source files that
+  alone understated the total by roughly a quarter.
+
+  Sizes now come from `st_blocks`, which is what `du` has always used and the
+  reason `du` and `ls -l` disagree. Measured against `du` on real folders, Helm
+  now matches to **100.00%**, where before it ranged from 75% to 169% depending
+  on what the folder held.
+
+  Dart's `FileStat` exposes no `st_blocks`, so this reaches `lstat(2)` directly
+  through `dart:ffi` rather than a platform channel — the scanners run in
+  background isolates over ~140,000 files, where a channel hop per file is not
+  affordable. The struct layout is checked against a known file at startup and
+  the whole path falls back to the old behaviour if anything disagrees.
+
+- **Duplicate sets report what deleting them actually frees.** Reclaimable space
+  was one copy's size multiplied by the number of extra copies. Byte-identical
+  files can still occupy different numbers of blocks when macOS has compressed
+  one and not the other, so it is now summed per copy, and the copy assumed kept
+  is the largest — the figure can no longer promise back more than you get.
+  Duplicate *detection* is unchanged and still groups on content size, which is
+  the only thing identical files are guaranteed to share.
+
+- **Large-file search filters and reports on disk cost too**, so a file the
+  treemap draws at 40 MB can no longer appear in the list at 154 MB.
+
 ## [1.5.1] — 2026-08-26
 
 A reliability and safety release, following a full audit of the app. No new
