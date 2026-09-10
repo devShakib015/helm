@@ -147,11 +147,13 @@ Future<void> showRemovalReport(
                   title: admin.length == 1
                       ? 'Needs an administrator'
                       : 'Need an administrator',
-                  // The actionable half. These sit under /Library, which is
-                  // owned by root on every Mac, so no amount of Full Disk
-                  // Access changes the answer — only an admin password does.
+                  // The actionable half. Says what macOS reported and what
+                  // would change it, and hedges the *cause* — /Library being
+                  // root-owned is the usual one, but the error does not say
+                  // so, and asserting it would repeat the "needs Full Disk
+                  // Access" mistake this dialog replaced.
                   note:
-                      'These live in a folder owned by the system. Helm runs as you, not as an administrator, so macOS refuses. Remove them in Finder (you will be asked for your password), or leave them — they are inert without the app.',
+                      'macOS refused: Helm runs as you, not as an administrator. Usually that is because the item sits in a folder the system owns, such as /Library. Remove them in Finder, where you will be asked for your password — or leave them, since they are inert without the app.',
                   items: admin,
                 ),
               ],

@@ -52,7 +52,9 @@ void main() {
 
     expect(find.text('2 items could not be removed'), findsOneWidget);
     expect(find.textContaining('Need an administrator'), findsOneWidget);
-    expect(find.textContaining('owned by the system'), findsOneWidget);
+    expect(find.textContaining('not as an administrator'), findsOneWidget);
+    // Hedged, because the error says the OS refused — not why.
+    expect(find.textContaining('Usually that is because'), findsOneWidget);
     // The old dead end, and the wrong guess that used to stand in for it.
     expect(find.textContaining('Full Disk Access'), findsNothing);
     // Both items named, so the user can go and deal with them.
