@@ -69,6 +69,25 @@ class NativeBridge {
           ),
       ];
 
+  /// Whether this app's own bundle still validates against its signature.
+  ///
+  /// A bundle that does not validate cannot hold a Full Disk Access grant:
+  /// macOS establishes identity from the signature before applying a TCC
+  /// grant, so the switch reads ON and every protected path stays refused.
+  /// Returns true when the answer is unavailable — refusing to guess is the
+  /// point, and a false "your signature is broken" would be worse than saying
+  /// nothing.
+  static Future<bool> codeSignatureValid() async {
+    try {
+      final res = await _channel.invokeMethod<bool>('codeSignatureValid');
+      return res ?? true;
+    } on PlatformException {
+      return true;
+    } on MissingPluginException {
+      return true;
+    }
+  }
+
   /// Accurate capacity for the volume containing [path], including purgeable
   /// space (matches "About This Mac" ▸ Storage). Returns null if unavailable.
   static Future<Map<String, dynamic>?> volumeInfo(String path) async {

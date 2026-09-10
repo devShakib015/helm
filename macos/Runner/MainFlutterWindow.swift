@@ -5,6 +5,7 @@ import FlutterMacOS
 import ImageIO
 import IOKit
 import IOKit.ps
+import Security
 import ServiceManagement
 import UserNotifications
 
@@ -52,6 +53,7 @@ enum HelmNative {
   static func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "moveToTrash": moveToTrash(call, result: result)
+    case "codeSignatureValid": codeSignatureValid(result: result)
     case "volumeInfo": volumeInfo(call, result: result)
     default: result(FlutterMethodNotImplemented)
     }
@@ -99,6 +101,40 @@ enum HelmNative {
       }
     }
     result(["trashed": trashed, "failures": failures])
+  }
+
+  /// Whether this app's own bundle still validates against its signature.
+  ///
+  /// Worth asking, because a bundle that does not validate cannot be given
+  /// Full Disk Access: macOS establishes an app's identity from its signature
+  /// before applying a TCC grant, so the switch in Privacy & Security can read
+  /// ON while every protected path stays refused. Helm hits this the moment a
+  /// build rewrites App.framework without Xcode re-sealing the bundle around
+  /// it, which is what an incremental build does.
+  ///
+  /// kSecCSCheckNestedCode is the flag that matters — it is the one that
+  /// compares nested frameworks against the outer seal. Without it the check
+  /// passes on exactly the bundles this is meant to catch.
+  ///
+  /// Uses the Security framework rather than shelling out to `codesign`, which
+  /// ships with the Xcode command line tools and is therefore absent on most
+  /// users' Macs.
+  private static func codeSignatureValid(result: @escaping FlutterResult) {
+    // Hashing a 47 MB bundle is not instant, and this is called while the UI is
+    // deciding what to tell the user.
+    DispatchQueue.global(qos: .userInitiated).async {
+      var staticCode: SecStaticCode?
+      let created = SecStaticCodeCreateWithPath(
+        Bundle.main.bundleURL as CFURL, SecCSFlags(), &staticCode)
+      guard created == errSecSuccess, let code = staticCode else {
+        DispatchQueue.main.async { result(false) }
+        return
+      }
+      let flags = SecCSFlags(
+        rawValue: kSecCSCheckNestedCode | kSecCSStrictValidate)
+      let status = SecStaticCodeCheckValidity(code, flags, nil)
+      DispatchQueue.main.async { result(status == errSecSuccess) }
+    }
   }
 
   private static func volumeInfo(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

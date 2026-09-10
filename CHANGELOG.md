@@ -4,6 +4,46 @@ All notable changes to Helm are documented here.
 
 ## [Unreleased]
 
+### Fixed — Full Disk Access could not be granted at all
+
+- **"Limited disk access" was right, and the advice was wrong.** Helm's own code
+  signature did not validate, and macOS establishes an app's identity from its
+  signature *before* matching a Full Disk Access grant to it. With no identity
+  to match, the switch in Privacy & Security could read ON while every protected
+  folder stayed refused. The banner's advice — "Already granted but still seeing
+  this? Relaunch Helm." — sent you round that loop forever, because relaunching
+  cannot fix it.
+
+  The cause is an incremental build. Xcode seals the app bundle only when the
+  Runner target itself is rebuilt, but Flutter's "Bundle Framework" phase
+  rewrites `App.framework` on every build, so any build where only Dart changed
+  leaves the outer seal pointing at a framework that is no longer there:
+
+  ```
+  Contents/_CodeSignature/CodeResources     15:08:47   outer bundle sealed
+  Contents/Frameworks/App.framework/…/App   15:30:38   rewritten 22 min later
+
+  seal recorded  Frameworks/App.framework = 4ba5cc60…
+  actually present                        = c7a45621…
+  ```
+
+  `scripts/release.sh` did not catch it because its entire signing step was
+  gated behind having a Developer ID certificate — and Helm deliberately has
+  none. Without one, the script signed nothing and verified nothing, so the
+  shipped DMG was whatever `flutter build` happened to leave behind. It now
+  always re-signs (ad-hoc when there is no certificate) and always verifies with
+  `--deep`, which is the only mode that checks nested code against the outer
+  seal. A failed verification now fails the release.
+
+- **Helm can now tell you this itself.** When Full Disk Access reads as denied,
+  it asks the Security framework whether its own bundle still validates, and if
+  not it says so plainly instead of repeating the relaunch advice.
+
+- **Ad-hoc signing has a permanent consequence, now stated out loud.** Without a
+  Developer ID, macOS keys the grant to the exact binary, so **Full Disk Access
+  must be granted again after every update**. A Developer ID certificate is what
+  makes it stable across versions; nothing else does.
+
 ### Fixed — the Uninstaller offering things it cannot remove
 
 - **Safari was in the list, at 0 B.** `/Applications/Safari.app` is a symlink

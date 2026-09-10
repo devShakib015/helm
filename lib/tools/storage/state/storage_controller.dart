@@ -35,6 +35,12 @@ class StorageController extends ChangeNotifier with WidgetsBindingObserver {
   FdaStatus fda = FdaStatus.unknown;
   bool fdaDismissed = false;
 
+  /// False when this copy of Helm cannot hold a Full Disk Access grant at all,
+  /// because its own signature no longer validates. Optimistic until proven
+  /// otherwise: the banner should never accuse the app of being broken on the
+  /// strength of a check that did not run.
+  bool canHoldGrant = true;
+
   ScanState state = ScanState.idle;
   ScanProgress progress = const ScanProgress();
   List<StorageCategory> categories = const [];
@@ -63,6 +69,9 @@ class StorageController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> init() async {
     fda = await _perm.checkFullDiskAccess();
+    // Only worth the bundle hash when the answer changes what we say. A granted
+    // app is holding a grant, so the question is already answered.
+    if (fda != FdaStatus.granted) canHoldGrant = await _perm.canHoldGrant();
     await refreshVolume();
   }
 
@@ -74,6 +83,11 @@ class StorageController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> recheckPermissions() async {
     fda = await _perm.checkFullDiskAccess();
+    if (fda != FdaStatus.granted) {
+      canHoldGrant = await _perm.canHoldGrant();
+    } else {
+      canHoldGrant = true;
+    }
     _notify();
   }
 

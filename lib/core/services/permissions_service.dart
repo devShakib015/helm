@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../utils/mac_paths.dart';
+import 'native_bridge.dart';
 
 enum FdaStatus {
   /// Helm can read TCC-protected locations — full results.
@@ -43,6 +44,17 @@ class PermissionsService {
     }
     return sawBlocked ? FdaStatus.denied : FdaStatus.unknown;
   }
+
+  /// Whether Helm's own bundle validates — and so whether granting Full Disk
+  /// Access can work at all.
+  ///
+  /// This exists because the honest answer to "I turned it on and it still says
+  /// limited" is sometimes "the switch cannot apply to this copy of the app".
+  /// macOS reads an app's identity from its signature before matching a TCC
+  /// grant to it, and a bundle whose nested code no longer matches the outer
+  /// seal has no identity to match. Telling someone to relaunch, which is what
+  /// Helm used to say, sends them round the same loop forever.
+  Future<bool> canHoldGrant() => NativeBridge.codeSignatureValid();
 
   /// Opens System Settings ▸ Privacy & Security ▸ Full Disk Access.
   Future<void> openFullDiskAccessSettings() async {

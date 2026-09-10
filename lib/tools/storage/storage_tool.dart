@@ -57,20 +57,42 @@ class _StorageToolState extends State<StorageTool> {
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 Insets.xxl, Insets.lg, Insets.xxl, 0),
-            child: NoticeBanner(
-              icon: Icons.lock_outline_rounded,
-              title: 'Grant Full Disk Access for complete results',
-              message:
-                  'Turn Helm on in System Settings, then relaunch — macOS '
-                  'applies the permission when the app starts. Already granted '
-                  'but still seeing this? Relaunch Helm.',
-              accent: AppColors.warning,
-              primaryLabel: 'Open Settings',
-              onPrimary: storage.openFdaSettings,
-              secondaryLabel: 'Relaunch Helm',
-              onSecondary: storage.relaunchApp,
-              onDismiss: storage.dismissFdaBanner,
-            ),
+            child: storage.canHoldGrant
+                ? NoticeBanner(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Grant Full Disk Access for complete results',
+                    message:
+                        'Turn Helm on in System Settings, then relaunch — macOS '
+                        'applies the permission when the app starts.',
+                    accent: AppColors.warning,
+                    primaryLabel: 'Open Settings',
+                    onPrimary: storage.openFdaSettings,
+                    secondaryLabel: 'Relaunch Helm',
+                    onSecondary: storage.relaunchApp,
+                    onDismiss: storage.dismissFdaBanner,
+                  )
+                // The banner used to end with "Already granted but still seeing
+                // this? Relaunch Helm." — which sent anyone in this state round
+                // the same loop forever, because relaunching cannot fix it.
+                // macOS reads an app's identity from its signature before
+                // matching a Full Disk Access grant to it, so a copy of Helm
+                // whose signature does not validate can be switched ON and
+                // still be refused everything.
+                : NoticeBanner(
+                    icon: Icons.gpp_maybe_outlined,
+                    title: 'Full Disk Access cannot apply to this copy of Helm',
+                    message:
+                        'Helm’s own signature does not validate, so macOS has '
+                        'no identity to attach the permission to — the switch '
+                        'can read ON in System Settings and every protected '
+                        'folder will still be refused. Relaunching will not '
+                        'change it. Reinstall from a fresh download, then grant '
+                        'access again.',
+                    accent: AppColors.danger,
+                    primaryLabel: 'Open Settings',
+                    onPrimary: storage.openFdaSettings,
+                    onDismiss: storage.dismissFdaBanner,
+                  ),
           ),
         Expanded(
           child: AnimatedSwitcher(
