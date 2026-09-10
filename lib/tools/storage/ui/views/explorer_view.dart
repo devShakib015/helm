@@ -6,6 +6,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/byte_format.dart';
 import '../../../../core/widgets/buttons.dart';
+import '../../../../core/models/removal_failure.dart';
 import '../../../../core/widgets/confirm.dart';
 import '../../../../core/widgets/glass_panel.dart';
 import '../../../../core/widgets/hoverable.dart';
@@ -75,7 +76,12 @@ class _ExplorerViewState extends State<ExplorerView> {
     setState(() => _busy = false);
     if (res.failed.isNotEmpty && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Some items could not be removed.')),
+        SnackBar(content: Text(summariseFailures(res.failed))),
+      );
+      await showRemovalReport(
+        context,
+        removed: res.removedCount,
+        failed: res.failed,
       );
     }
   }

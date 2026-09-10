@@ -6,6 +6,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/byte_format.dart';
 import '../../core/widgets/buttons.dart';
+import '../../core/models/removal_failure.dart';
 import '../../core/widgets/confirm.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/glass_panel.dart';
@@ -195,11 +196,25 @@ class _DetailPaneState extends State<_DetailPane> {
     if (!mounted) return;
 
     final n = res.trashed.length;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(res.failed.isEmpty
-          ? 'Moved $n items to Trash'
-          : 'Moved $n items to Trash · ${res.failed.length} skipped'),
-    ));
+    if (res.failed.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Moved $n items to Trash')),
+      );
+      return;
+    }
+    // "N skipped" on its own is what sent people looking for a bug in Helm.
+    // The reason is nearly always that the installer put a launch agent or a
+    // helper tool under /Library, which belongs to root — so say that, name
+    // the items, and stop pretending it is a mystery.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Moved $n items to Trash · '
+          '${summariseFailures(res.failed)}')),
+    );
+    await showRemovalReport(
+      context,
+      removed: n,
+      failed: res.failed,
+    );
   }
 
   @override

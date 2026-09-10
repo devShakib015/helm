@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/models/removal_failure.dart';
 import '../../../core/services/native_bridge.dart';
 import '../models/installed_app.dart';
 import '../services/uninstaller_service.dart';
@@ -110,20 +111,30 @@ class UninstallerController extends ChangeNotifier {
 
   /// Moves [selectedPaths] to the Trash, then removes the uninstalled app from
   /// the list and clears the detail pane. Returns the trashed/failed split.
-  Future<({List<String> trashed, List<String> failed})> uninstall(
+  Future<({List<String> trashed, List<RemovalFailure> failed})> uninstall(
     List<String> selectedPaths,
   ) async {
     if (selectedPaths.isEmpty) {
-      return (trashed: const <String>[], failed: const <String>[]);
+      return (trashed: const <String>[], failed: const <RemovalFailure>[]);
     }
     uninstalling = true;
     _safeNotify();
 
-    ({List<String> trashed, List<String> failed}) result;
+    ({List<String> trashed, List<RemovalFailure> failed}) result;
     try {
       result = await NativeBridge.moveToTrash(selectedPaths);
-    } catch (_) {
-      result = (trashed: const <String>[], failed: selectedPaths);
+    } catch (e) {
+      result = (
+        trashed: const <String>[],
+        failed: [
+          for (final p in selectedPaths)
+            RemovalFailure(
+              path: p,
+              reason: RemovalReason.unknown,
+              message: e.toString(),
+            ),
+        ],
+      );
     }
 
     final trashedSet = result.trashed.toSet();

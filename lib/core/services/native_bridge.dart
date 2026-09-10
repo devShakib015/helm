@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../models/removal_failure.dart';
 import '../utils/mac_paths.dart';
 
 /// Thin wrapper over the Swift `helm/native` MethodChannel. Only two things
@@ -17,12 +18,16 @@ class NativeBridge {
   /// Privacy and Startup all call this directly, and a guard placed further up
   /// would simply be bypassed. Refused paths come back in `failed`; they are
   /// never handed to the native API.
-  static Future<({List<String> trashed, List<String> failed})> moveToTrash(
-      List<String> paths) async {
+  static Future<({List<String> trashed, List<RemovalFailure> failed})>
+      moveToTrash(List<String> paths) async {
     final allowed = <String>[];
-    final refused = <String>[];
+    final refused = <RemovalFailure>[];
     for (final p in paths) {
-      (MacPaths.isDeletionForbidden(p) ? refused : allowed).add(p);
+      if (MacPaths.isDeletionForbidden(p)) {
+        refused.add(RemovalFailure.guarded(p));
+      } else {
+        allowed.add(p);
+      }
     }
     if (allowed.isEmpty) {
       return (trashed: const <String>[], failed: refused);
@@ -32,19 +37,37 @@ class NativeBridge {
         'paths': allowed,
       });
       final map = Map<String, dynamic>.from(res as Map);
+      final raw = map['failures'] as List? ?? const [];
       return (
         trashed: List<String>.from(map['trashed'] as List? ?? const []),
         failed: [
-          ...List<String>.from(map['failed'] as List? ?? const []),
+          for (final f in raw)
+            RemovalFailure.fromNative(Map<Object?, Object?>.from(f as Map)),
           ...refused,
         ],
       );
-    } on PlatformException {
-      return (trashed: const <String>[], failed: paths);
+    } on PlatformException catch (e) {
+      return (trashed: const <String>[], failed: _allFailed(paths, e.message));
     } on MissingPluginException {
-      return (trashed: const <String>[], failed: paths);
+      return (
+        trashed: const <String>[],
+        failed: _allFailed(paths, 'The native removal channel is unavailable.'),
+      );
     }
   }
+
+  /// Every path failed for the same reason — the channel itself broke, so the
+  /// OS never got a chance to give a per-path answer.
+  static List<RemovalFailure> _allFailed(List<String> paths, String? message) => [
+        for (final p in paths)
+          RemovalFailure(
+            path: p,
+            reason: RemovalReason.unknown,
+            message: message?.trim().isNotEmpty == true
+                ? message!.trim()
+                : 'The removal could not be carried out.',
+          ),
+      ];
 
   /// Accurate capacity for the volume containing [path], including purgeable
   /// space (matches "About This Mac" ▸ Storage). Returns null if unavailable.

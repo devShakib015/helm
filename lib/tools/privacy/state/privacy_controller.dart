@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/models/removal_failure.dart';
 import '../../../core/services/native_bridge.dart';
 import '../models/trace_group.dart';
 import '../services/privacy_service.dart';
@@ -57,14 +58,19 @@ class PrivacyController extends ChangeNotifier {
 
   /// Moves every selected trace to the Trash (recoverable), drops the cleared
   /// items, and prunes groups that end up empty. Returns how many were trashed
-  /// and how many failed (typically: need Full Disk Access).
-  Future<({int trashed, int failed})> clearSelected() async {
+  /// and every refusal with the system's reason attached. It used to return a
+  /// bare count alongside a hardcoded "need Full Disk Access", which was a
+  /// guess — most refusals here are ordinary root-owned paths, where Full Disk
+  /// Access changes nothing and only an administrator would.
+  Future<({int trashed, List<RemovalFailure> failed})> clearSelected() async {
     final paths = <String>[
       for (final g in groups)
         for (final item in g.items)
           if (item.selected) item.path,
     ];
-    if (paths.isEmpty) return (trashed: 0, failed: 0);
+    if (paths.isEmpty) {
+      return (trashed: 0, failed: const <RemovalFailure>[]);
+    }
 
     final res = await NativeBridge.moveToTrash(paths);
     final removed = res.trashed.toSet();
@@ -75,7 +81,7 @@ class PrivacyController extends ChangeNotifier {
     groups = [for (final g in groups) if (!g.isEmpty) g];
     _safeNotify();
 
-    return (trashed: res.trashed.length, failed: res.failed.length);
+    return (trashed: res.trashed.length, failed: res.failed);
   }
 
   void _safeNotify() {

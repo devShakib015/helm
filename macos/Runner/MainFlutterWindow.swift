@@ -65,16 +65,40 @@ enum HelmNative {
     }
     let fm = FileManager.default
     var trashed: [String] = []
-    var failed: [String] = []
+    var failures: [[String: Any]] = []
     for path in paths {
+      // Already gone is the outcome the caller asked for. Counting it as a
+      // failure is how a leftover path that was cleaned between the scan and
+      // the confirm turns into an unexplained "1 skipped".
+      // Only ENOENT/ENOTDIR count: an lstat refused for permission means the
+      // item may well still be there, and must not be reported as removed.
+      var st = stat()
+      if lstat(path, &st) != 0 && (errno == ENOENT || errno == ENOTDIR) {
+        trashed.append(path)
+        continue
+      }
       do {
         try fm.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
         trashed.append(path)
-      } catch {
-        failed.append(path)
+      } catch let error as NSError {
+        // The reason is the entire point of this branch. Discarding it — which
+        // is what this did — left the UI able to say only "skipped", for every
+        // app whose installer put a launch agent or helper tool in /Library,
+        // where removing anything needs admin rights the app does not have.
+        var entry: [String: Any] = [
+          "path": path,
+          "code": error.code,
+          "domain": error.domain,
+          "message": error.localizedDescription,
+        ]
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+          entry["underlyingCode"] = underlying.code
+          entry["underlyingDomain"] = underlying.domain
+        }
+        failures.append(entry)
       }
     }
-    result(["trashed": trashed, "failed": failed])
+    result(["trashed": trashed, "failures": failures])
   }
 
   private static func volumeInfo(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

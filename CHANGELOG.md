@@ -4,6 +4,39 @@ All notable changes to Helm are documented here.
 
 ## [Unreleased]
 
+### Fixed — removals that said only "skipped"
+
+- **"1 skipped" never said why, and for a lot of apps it said it every time.**
+  The Uninstaller reported removals as a bare count, because the native side
+  caught the error from `trashItem` and threw it away. The reason was nearly
+  always the same and entirely actionable: an app installed from a `.pkg` leaves
+  a launch agent, a helper tool or a support folder under `/Library`, which is
+  owned by `root` on every Mac —
+
+  ```
+  /Library/Application Support    drwxr-xr-x root:admin   not writable
+  /Library/Preferences            drwxr-xr-x root:wheel   not writable
+  /Library/LaunchAgents           drwxr-xr-x root:wheel   not writable
+  /Library/LaunchDaemons          drwxr-xr-x root:wheel   not writable
+  /Library/PrivilegedHelperTools  drwxr-xr-t root:wheel   not writable
+  ```
+
+  — so macOS refuses (`NSCocoaErrorDomain 513`, "you don't have permission to
+  access it") and Helm had nothing to show but a number. Every removal now
+  carries the system's own explanation through to the surface, and a report
+  names the items, groups the ones an administrator could remove, and says what
+  to do about them. **No Full Disk Access setting affects this**, which matters,
+  because the Cleaner and Privacy tools used to assert that it did — that string
+  was hardcoded into their result message regardless of what actually happened.
+
+- **A leftover that was already gone counted as a failure.** If a cache folder
+  disappeared between the scan and the confirmation — which is what caches do —
+  the removal reported it as skipped. Permanent deletion had always treated
+  "already gone" as success; moving to the Trash now agrees with it.
+
+- The report is also wired into the Storage cleaner, the treemap explorer and
+  Privacy, all of which had the same bare-count problem.
+
 ### Fixed — the numbers
 
 - **Storage measured what files contain, not what they cost.** Every total, every

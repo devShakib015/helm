@@ -100,20 +100,20 @@ void main() {
       ];
       final r = await svc.deletePermanently(targets);
       expect(r.removed, isEmpty, reason: 'nothing outside the Trash may be destroyed');
-      expect(r.failed.toSet(), targets.toSet());
+      expect(r.failed.map((f) => f.path).toSet(), targets.toSet());
     });
 
     test('permanent delete refuses the Trash folder itself', () async {
       final r = await svc.deletePermanently([MacPaths.userTrash]);
       expect(r.removed, isEmpty);
-      expect(r.failed, [MacPaths.userTrash]);
+      expect(r.failed.map((f) => f.path), [MacPaths.userTrash]);
     });
 
     test('move-to-trash refuses protected and container paths', () async {
       final targets = ['/System/Library', '/', home, '$home/Library'];
       final r = await svc.moveToTrash(targets);
       expect(r.removed, isEmpty);
-      expect(r.failed.toSet(), targets.toSet());
+      expect(r.failed.map((f) => f.path).toSet(), targets.toSet());
     });
 
     test('empty input is a no-op, not an error', () async {
@@ -153,7 +153,7 @@ void main() {
       final targets = ['/', '/System/Library', home, '$home/Library', ''];
       final r = await NativeBridge.moveToTrash(targets);
       expect(r.trashed, isEmpty);
-      expect(r.failed.toSet(), targets.toSet());
+      expect(r.failed.map((f) => f.path).toSet(), targets.toSet());
     });
 
     test('an empty request is a no-op', () async {

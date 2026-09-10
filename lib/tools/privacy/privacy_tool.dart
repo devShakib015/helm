@@ -7,6 +7,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/utils/byte_format.dart';
 import '../../core/widgets/buttons.dart';
+import '../../core/models/removal_failure.dart';
 import '../../core/widgets/confirm.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/glass_panel.dart';
@@ -49,10 +50,16 @@ class _PrivacyToolState extends State<PrivacyTool> {
     if (!mounted) return;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(res.failed == 0
+      content: Text(res.failed.isEmpty
           ? 'Cleared ${res.trashed} traces.'
-          : 'Cleared ${res.trashed} · ${res.failed} skipped (need Full Disk Access).'),
+          : 'Cleared ${res.trashed} · ${summariseFailures(res.failed)}'),
     ));
+    await showRemovalReport(
+      context,
+      removed: res.trashed,
+      failed: res.failed,
+      removedNoun: 'traces',
+    );
   }
 
   Future<void> _flushDns() async {
