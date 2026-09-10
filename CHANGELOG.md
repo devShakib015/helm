@@ -2,7 +2,17 @@
 
 All notable changes to Helm are documented here.
 
-## [Unreleased]
+## [1.6.0] — 2026-09-10
+
+Four fixes, all of them things the app was reporting wrongly rather than
+failing to do. The storage numbers move for everyone — see below.
+
+> **You will have to grant Full Disk Access again.** Helm is ad-hoc signed (no
+> $99/yr Developer ID), so macOS keys the permission to the exact binary and a
+> new build is a new binary. Remove the old Helm entry in System Settings ▸
+> Privacy & Security ▸ Full Disk Access with the **−** button, then add this one.
+> Until a Developer ID is in the picture this is true of every update, and Helm
+> now says so rather than telling you to relaunch.
 
 ### Fixed — Full Disk Access could not be granted at all
 

@@ -6,7 +6,7 @@ class AppInfo {
 
   // ---- Product ------------------------------------------------------------
   static const String name = 'Helm';
-  static const String version = '1.5.1';
+  static const String version = '1.6.0';
   static const String tagline =
       'Take the helm of your Mac. Fifteen native tools in one window — '
       'storage, monitoring, clipboard and more.';
