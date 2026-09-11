@@ -76,10 +76,12 @@ ok "Built ${BUILD_APP}"
 # ---------------------------------------------------------------------- sign
 # ALWAYS re-sign, even with no Developer ID.
 #
-# Xcode seals the app bundle only when the Runner target itself is rebuilt, but
-# Flutter's "Bundle Framework" phase rewrites App.framework on every build. So
-# any build where only Dart changed leaves the outer seal pointing at an
-# App.framework that is no longer there:
+# Flutter's embed step (macos_assemble.sh embed, which runs xcode_backend.dart)
+# copies a freshly compiled App.framework into the bundle and signs it on every
+# build; Xcode then seals the app around it. Normally, correctly. But after "The
+# Xcode build system has crashed. Build again to continue.", the next build can
+# print "✓ Built" having re-embedded App.framework without re-sealing the app
+# (reproduced 11 Sep 2026). The 1.6.0 candidate had exactly that fingerprint:
 #
 #   seal recorded  Frameworks/App.framework = 4ba5cc60…
 #   actually present                        = c7a45621…
@@ -124,10 +126,12 @@ done < <(find "$BUILD_APP/Contents/MacOS" -type f -perm +111 \
 
 codesign "${APP_SIGN_ARGS[@]}" "$BUILD_APP"
 
-# --deep on VERIFY (unlike on sign) is the right flag: it is the only one that
-# checks nested code against the outer seal, which is the failure this exists to
-# catch. Hard failure — shipping a bundle that cannot be validated is how the
-# Full Disk Access grant silently stops applying.
+# Any verification catches a stale seal: a plain `codesign --verify` fails on one
+# too, because the app's seal records each nested framework's hash. What was
+# missing was a verification that ran at all — this used to sit inside the
+# Developer ID branch. --deep additionally validates each nested item's own
+# signature, and --verbose names the one that changed. Hard failure: shipping a
+# bundle that cannot be validated is how Full Disk Access silently stops applying.
 if ! codesign --verify --deep --strict --verbose=2 "$BUILD_APP" 2>&1 | tail -2; then
   echo "Signature verification FAILED for $BUILD_APP" >&2
   exit 1

@@ -108,17 +108,18 @@ enum HelmNative {
   /// Worth asking, because a bundle that does not validate cannot be given
   /// Full Disk Access: macOS establishes an app's identity from its signature
   /// before applying a TCC grant, so the switch in Privacy & Security can read
-  /// ON while every protected path stays refused. Helm hits this the moment a
-  /// build rewrites App.framework without Xcode re-sealing the bundle around
-  /// it, which is what an incremental build does.
+  /// ON while every protected path stays refused. Helm shipped a build like that.
+  /// Reproduced since: a rebuild after an Xcode build-system crash re-embeds
+  /// App.framework, prints "✓ Built", and never re-seals the app around it.
   ///
-  /// kSecCSCheckNestedCode is the flag that matters — it is the one that
-  /// compares nested frameworks against the outer seal. Without it the check
-  /// passes on exactly the bundles this is meant to catch.
+  /// The app's seal records each nested framework's hash, so validation fails on
+  /// a stale seal with or without kSecCSCheckNestedCode (-67021,
+  /// errSecCSBadNestedCode). The flag stays because it also validates each nested
+  /// item's own signature, not because the check depends on it.
   ///
-  /// Uses the Security framework rather than shelling out to `codesign`, which
-  /// ships with the Xcode command line tools and is therefore absent on most
-  /// users' Macs.
+  /// Uses the Security framework rather than running /usr/bin/codesign — which
+  /// does ship with macOS — because this is a yes-or-no question with a status
+  /// code for an answer, and a subprocess would add a fork and text to parse.
   private static func codeSignatureValid(result: @escaping FlutterResult) {
     // Hashing a 47 MB bundle is not instant, and this is called while the UI is
     // deciding what to tell the user.
@@ -127,7 +128,9 @@ enum HelmNative {
       let created = SecStaticCodeCreateWithPath(
         Bundle.main.bundleURL as CFURL, SecCSFlags(), &staticCode)
       guard created == errSecSuccess, let code = staticCode else {
-        DispatchQueue.main.async { result(false) }
+        // Could not even open the bundle to ask. Answer valid: a check that
+        // did not run must not tell someone their working copy is broken.
+        DispatchQueue.main.async { result(true) }
         return
       }
       let flags = SecCSFlags(

@@ -24,10 +24,12 @@ failing to do. The storage numbers move for everyone — see below.
   this? Relaunch Helm." — sent you round that loop forever, because relaunching
   cannot fix it.
 
-  The cause is an incremental build. Xcode seals the app bundle only when the
-  Runner target itself is rebuilt, but Flutter's "Bundle Framework" phase
-  rewrites `App.framework` on every build, so any build where only Dart changed
-  leaves the outer seal pointing at a framework that is no longer there:
+  The app's outer seal described an older `App.framework` than the one inside
+  it. Reproduced since: after "The Xcode build system has crashed. Build again to
+  continue.", the next build printed ✓ Built, re-embedded `App.framework`, and
+  never re-sealed the app. (This entry first blamed ordinary incremental builds;
+  a clean build and a Dart-only rebuild both seal correctly.) The shipped
+  candidate carried the same fingerprint:
 
   ```
   Contents/_CodeSignature/CodeResources     15:08:47   outer bundle sealed
@@ -41,9 +43,10 @@ failing to do. The storage numbers move for everyone — see below.
   gated behind having a Developer ID certificate — and Helm deliberately has
   none. Without one, the script signed nothing and verified nothing, so the
   shipped DMG was whatever `flutter build` happened to leave behind. It now
-  always re-signs (ad-hoc when there is no certificate) and always verifies with
-  `--deep`, which is the only mode that checks nested code against the outer
-  seal. A failed verification now fails the release.
+  always re-signs (ad-hoc when there is no certificate) and always verifies the
+  bundle. Any `codesign --verify` fails on a stale seal, with or without
+  `--deep`; the problem was that nothing ran one. A failed verification now
+  fails the release.
 
 - **Helm can now tell you this itself.** When Full Disk Access reads as denied,
   it asks the Security framework whether its own bundle still validates, and if
